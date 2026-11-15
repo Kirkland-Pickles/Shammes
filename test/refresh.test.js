@@ -263,6 +263,7 @@ it('ignores artwork searches that finish out of order', async () => {
   context.document.querySelector = selector => fields[selector];
   context.document.createElement = () => ({});
   vm.runInContext('loadArtTabs = async () => {};', context);
+  state.cfg = { api_key: 'fixture' };
   state.modal = {};
   const older = vm.runInContext('artSearch()', context);
   fields['#art-q'].value = 'new';

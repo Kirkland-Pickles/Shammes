@@ -535,6 +535,18 @@ function client() {
 }
 
 ipcMain.handle('sgdb:search', async (_e, q) => client().searchGame(strips.toSearchQuery(q)));
+ipcMain.handle('steam:artwork-search', async (_e, query) => {
+  const term = String(query || '').trim().slice(0, 200);
+  if (!term) return [];
+  const url = new URL('https://store.steampowered.com/api/storesearch/');
+  url.search = new URLSearchParams({ term, cc: 'us', l: 'english' });
+  const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error(`Steam search failed (${response.status}).`);
+  const data = await response.json();
+  return (Array.isArray(data.items) ? data.items : []).slice(0, 25)
+    .filter(item => Number.isSafeInteger(item.id) && item.id > 0 && typeof item.name === 'string')
+    .map(item => ({ id: item.id, name: item.name }));
+});
 ipcMain.handle('sgdb:by-steam', async (_e, appid) => client().gameBySteamAppid(appid));
 
 /** Identity guess for an existing shortcut/store name (display only). */

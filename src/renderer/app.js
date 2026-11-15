@@ -1853,7 +1853,7 @@ function renderArtFilters() {
   const m = S.modal;
   if (!m) return;
   const kind = m.tab;
-  $('#art-filters').hidden = kind === 'manage';
+  $('#art-filters').hidden = kind === 'manage' || !S.cfg.api_key;
   $('#art-clear').hidden = m.row.source === 'desktop' || kind === 'manage';
   $('#art-clear').textContent = m.row.source === 'steam' || m.row.inSteam ? 'Restore default' : 'Clear selection';
   $('#art-file').hidden = kind === 'manage';
@@ -1908,6 +1908,7 @@ async function openArtModal(row, focusKind) {
     row, tab: focusKind || 'grid',
     returnFocus: document.activeElement,
     sgdbId: row.sgdbId || null,
+    steamId: row.source === 'steam' ? row.steamAppid : null,
     cache: {},           // `${sgdbId}:${kind}` -> items
     current: {},
     stock: {},
@@ -1925,15 +1926,16 @@ async function openArtModal(row, focusKind) {
   if (desktop) renderDesktopGameSettings(row);
   else renderSteamGameSettings(row);
   const keyless = !S.cfg.api_key;
+  $('.art-id-advanced').hidden = keyless;
+  $('#art-q').placeholder = keyless ? 'Search Steam' : 'Search SteamGridDB';
+  $('#art-q').setAttribute('aria-label', keyless ? 'Search Steam' : 'Search SteamGridDB');
   const writesSteam = row.source !== 'desktop' && (row.source === 'steam' || row.inSteam);
   $('#art-apply').hidden = !writesSteam;
   $('#art-apply-note').textContent = writesSteam
     ? 'save for batch apply, or apply one at a time'
     : 'Select images, then save your choices.';
   $('#art-key-notice').hidden = !keyless;
-  if (keyless) $('#art-key-notice-text').textContent = row.source === 'desktop'
-    ? 'You can still choose local icons and images.'
-    : 'You can still choose local artwork.';
+  if (keyless) $('#art-key-notice-text').textContent = 'Search Steam for official artwork, or choose your own images.';
   $('#art-url').hidden = row.source === 'desktop';
   $('#art-clear').hidden = row.source === 'desktop';
   $('#art-q').value = row.query || row.display;
@@ -1941,7 +1943,7 @@ async function openArtModal(row, focusKind) {
   $('#art-matches').hidden = true;
   $('#art-matches').open = false;
   $('#art-games').innerHTML = '';
-  for (const id of ['art-q', 'art-search', 'art-games', 'art-id']) $('#' + id).disabled = keyless;
+  for (const id of ['art-q', 'art-search', 'art-games', 'art-id']) $('#' + id).disabled = keyless && id === 'art-id';
   $('#art-url-entry').hidden = true;
   closeArtPreview();
   $('#art-grid').replaceChildren();
@@ -1956,7 +1958,7 @@ async function openArtModal(row, focusKind) {
       renderLogoPosition();
     }).catch(e => log(`Logo position: ${e.message}`));
   }
-  const focusTarget = S.modal.tab === 'manage' ? $('#game-settings-title') : keyless ? $('#art-file') : $('#art-q');
+  const focusTarget = S.modal.tab === 'manage' ? $('#game-settings-title') : $('#art-q');
   focusTarget.focus({ preventScroll: true });
   if (keyless || row.sgdbId) await loadArtTabs();
   else await Promise.all([loadArtTabs(), findInitialArtworkMatch(S.modal)]);
@@ -2191,6 +2193,15 @@ async function loadArtTabs(more = false) {
   const m = S.modal;
   if (!m) return;
   if (m.tab === 'manage') { await renderArtManage(); return; }
+  if (!S.cfg.api_key) {
+    const kind = m.tab, appid = m.steamId;
+    const image = appid ? await stockArtwork(m, kind) : null;
+    if (S.modal !== m || m.tab !== kind || m.steamId !== appid) return;
+    renderArtGrid();
+    if (image && m.row.source === 'desktop') $('#art-grid').appendChild(artThumb(image, 'Steam artwork', { file: image.file }));
+    artStatus(image ? 'Select an image.' : appid ? 'No Steam artwork found for this type.' : 'Search Steam to find a game.');
+    return;
+  }
   if (!m.sgdbId || !S.cfg.api_key) { renderArtGrid(); return; }
   const { sgdbId, tab: kind } = m;
   const key = artworkCacheKey(m);
@@ -2246,8 +2257,9 @@ function sameArtwork(a, b) {
 }
 
 async function stockArtwork(m, kind) {
-  m.stock[kind] ||= window.api.artCurrent({ row: rowPayload(m.row), kind, stock: true })
-    .then(current => current || (m.row.source === 'steam' ? window.api.artOfficial({ row: rowPayload(m.row), kind }) : null))
+  const row = !S.cfg.api_key && m.steamId ? { source: 'steam', steamAppid: m.steamId } : rowPayload(m.row);
+  m.stock[kind] ||= window.api.artCurrent({ row, kind, stock: true })
+    .then(current => current || (row.source === 'steam' ? window.api.artOfficial({ row, kind }) : null))
     .catch(e => { log(`Stock artwork: ${e.message}`); return null; });
   return m.stock[kind];
 }
@@ -2434,9 +2446,9 @@ async function artSearch(showMatches = false) {
   const q = $('#art-q').value.trim();
   if (!q) return;
   const search = m.search = (m.search || 0) + 1;
-  artStatus(`Searching SGDB for '${q}'…`);
+  artStatus(`Searching ${S.cfg.api_key ? 'SGDB' : 'Steam'} for '${q}'...`);
   try {
-    const games = await window.api.sgdbSearch(q);
+    const games = await (S.cfg.api_key ? window.api.sgdbSearch(q) : window.api.steamArtworkSearch(q));
     if (S.modal !== m || m.search !== search) return;
     m.games = games;
     const sel = $('#art-games');
@@ -2444,7 +2456,7 @@ async function artSearch(showMatches = false) {
     matches.hidden = !showMatches || games.length < 2;
     matches.open = !matches.hidden;
     sel.innerHTML = '';
-    if (!games.length) { artStatus('No SGDB matches. Try another query or paste an ID.'); return; }
+    if (!games.length) { artStatus(S.cfg.api_key ? 'No SGDB matches. Try another query or paste an ID.' : 'No Steam matches. Try another search.'); return; }
     for (const g of games) {
       const o = document.createElement('option');
       o.value = String(g.id);
@@ -2452,7 +2464,8 @@ async function artSearch(showMatches = false) {
       o.title = o.textContent;
       sel.appendChild(o);
     }
-    const g = games.find((game) => game.id === m.sgdbId) || games[0];
+    const g = games.find((game) => game.id === (S.cfg.api_key ? m.sgdbId : m.steamId)) || games[0];
+    if (!S.cfg.api_key) { m.stock = {}; m.steamId = g.id; sel.value = String(g.id); await loadArtTabs(); return; }
     sel.value = String(g.id);
     m.sgdbId = g.id;
     $('#art-id').value = String(g.id);
@@ -2592,6 +2605,7 @@ function wireToolbar() {
     const g = (m.games || []).find((x) => String(x.id) === e.target.value);
     if (g) {
       m.search = (m.search || 0) + 1;
+      if (!S.cfg.api_key) { m.stock = {}; m.steamId = g.id; await loadArtTabs(); return; }
       m.sgdbId = g.id;
       $('#art-id').value = String(g.id);
       await loadArtTabs();

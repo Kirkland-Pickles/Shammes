@@ -56,6 +56,7 @@ const handlers = {
   'art:thumbnail': (file) => { assert.ok(['C:\\Icons\\game.ico', 'C:\\Icons\\downloaded.ico', 'C:\\Images\\applied-grid.png'].includes(file)); return file.endsWith('game.ico') ? icon : downloadedIcon; },
   'art:current': () => null,
   'art:official': () => null,
+  'steam:artwork-search': () => [{ id: 42, name: 'Steam match' }],
   'art:logo-position': () => null,
   'art:download': (req) => {
     artworkWrites.push(req);
@@ -162,7 +163,7 @@ app.whenReady().then(async () => {
   assert.equal(await run("document.querySelector('#desktop-add').textContent"), 'Review changes');
   await wait("document.querySelector('#art-grid .manage-artwork img')?.naturalWidth > 0");
   assert.ok(iconPreviews > 0);
-  assert.equal(await run("document.querySelector('#art-search').disabled"), true);
+  assert.equal(await run("document.querySelector('#art-search').disabled"), false);
   assert.deepEqual(await run("Array.from(document.querySelectorAll('#art-tabs button'), button => button.textContent)"), ['Icon', 'Manage']);
   await run("document.querySelector('#desktop-game-settings details').open = true");
   assert.ok(await run("document.querySelector('.desktop-admin input').labels.length > 0"));
@@ -184,7 +185,7 @@ app.whenReady().then(async () => {
   await click('#desktop-games .cover-wrap');
   await wait("!!document.querySelector('#art-choice img') && document.querySelector('#art-choice img').naturalWidth > 0");
   assert.deepEqual(await run("Array.from(document.querySelectorAll('#art-tabs button'), button => button.textContent)"), ['Icon', 'Manage']);
-  assert.equal(await run("document.querySelector('#art-search').disabled"), true);
+  assert.equal(await run("document.querySelector('#art-search').disabled"), false);
   await click('#art-cancel');
   await click('#preferences > summary');
   await capture('settings-cog');

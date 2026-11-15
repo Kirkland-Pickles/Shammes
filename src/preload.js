@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('api', {
   // sgdb
   keyValidate: (key) => ipcRenderer.invoke('key:validate', key),
   sgdbSearch: (q) => ipcRenderer.invoke('sgdb:search', q),
+  steamArtworkSearch: (q) => ipcRenderer.invoke('steam:artwork-search', q),
   sgdbBySteam: (appid) => ipcRenderer.invoke('sgdb:by-steam', appid),
   resolveName: (name) => ipcRenderer.invoke('resolve:name', name),
   artList: (req) => ipcRenderer.invoke('art:list', req),
