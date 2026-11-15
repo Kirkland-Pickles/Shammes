@@ -244,11 +244,13 @@ async function detectSteam() {
   if (result.path && folderKey(result.path) !== lastDetectedSteamPath) log(`Steam found at ${result.path}`);
   lastDetectedSteamPath = folderKey(result.path);
 }
+let keyNoticeDismissed = false;
 function renderLibrarySetup() {
   const panel = $('#library-setup');
   const steamView = libraryView() === 'library';
   const needsSteam = steamView && (!S.steamFound || !S.cfg.steam_user_id);
-  panel.hidden = !!S.cfg.api_key && !needsSteam;
+  const needsKey = !S.cfg.api_key && !keyNoticeDismissed;
+  panel.hidden = !needsKey && !needsSteam;
   panel.innerHTML = '';
   if (panel.hidden) return;
   panel.innerHTML = `<div><h2 id="setup-title">Set up your library</h2><p>${needsSteam
@@ -256,8 +258,10 @@ function renderLibrarySetup() {
     : 'Add a SteamGridDB key to browse artwork. You can also use images from your computer.'}</p></div>
     <div class="setup-actions">${needsSteam && !S.steamFound ? '<button class="btn sm" id="connect-steam">Connect Steam</button>' : ''}
     ${needsSteam && S.steamFound ? '<button class="btn sm" data-setup="refresh">Check again</button>' : ''}
-    ${!S.cfg.api_key ? '<button class="btn sm" data-setup="key">Add artwork key</button>' : ''}
+    ${needsKey ? '<button class="btn sm" data-setup="key">Add artwork key</button><button class="text-btn setup-dismiss" data-setup="dismiss" aria-label="Dismiss" title="Dismiss">&times;</button>' : ''}
     ${steamView ? '' : '<button class="btn sm" data-setup="folder">Add game folder</button>'}</div>`;
+  const dismiss = $('[data-setup=dismiss]', panel);
+  if (dismiss) dismiss.onclick = () => { keyNoticeDismissed = true; renderLibrarySetup(); };
   const connect = $('#connect-steam', panel);
   if (connect) connect.onclick = openSteamSetup;
   const key = $('[data-setup="key"]', panel);
