@@ -54,6 +54,7 @@ input:not([type="checkbox"]):focus, select:focus, textarea:focus { outline: none
 input::selection, textarea::selection { color: var(--fg); background: var(--field-selection); }
 input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); flex: 0 0 auto; }
 button:focus-visible, input[type="checkbox"]:focus-visible, summary:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--field-focus); }
+#log:focus-visible { outline: 1px solid var(--field-focus); outline-offset: -1px; }
 select option { color: var(--fg); background: var(--panel); }
 select[size] option { padding: 4px 6px; }
 select option:checked { color: var(--fg); background: var(--field-selection); }
@@ -304,7 +305,7 @@ button.game-open:hover:not(:disabled) { border-color: transparent; background: t
 #page-add[open], #steam-setup[open], #library-intro[open] { display: flex; flex-direction: column; gap: 14px; }
 #page-review::backdrop, #page-add::backdrop, #steam-setup::backdrop, #library-intro::backdrop { background: #0009; }
 #library-intro p { line-height: 1.5; }
-#library-intro-title:focus { outline: none; }
+#library-intro-title:focus, #game-settings-title:focus { outline: none; }
 #intro-key .card { padding: 0; border: 0; background: transparent; }
 #intro-key h3 { margin-bottom: 8px; }
 .folder-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); }
