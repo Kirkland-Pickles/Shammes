@@ -2,7 +2,7 @@
 
 Lib Shammes is an app made to customize and modify your Steam game artwork using SteamGridDB.
 
-It can also scan your game folders, find installed games, and add them as non-Steam shortcuts. You can choose their artwork before adding them.
+It can also scan your game folders, find installed games, and bulk add them as non-Steam shortcuts or desktop shortcuts. You can choose their artwork before adding them.
 
 ## Screenshots
 
@@ -13,20 +13,24 @@ It can also scan your game folders, find installed games, and add them as non-St
 
 ## Install
 
-[Windows installer is here](https://github.com/Kirkland-Pickles/lib-shammes/releases/latest).
-Windows only.
-
+download windows release [here](https://github.com/Kirkland-Pickles/lib-shammes/releases/latest)
+ 
 ## How to use
 
-Your Steam library appears automatically. Open a game to change its artwork.
 
+*For games outside Steam:*  
+
+use <img src="docs/icons/add-games-folder.svg" width="16" height="16" alt="Add games folder" />, choose a game’s folder or a folder containing multiple games. Review the name, launcher and game match before adding them to Steam.
+
+To manage Desktop or Start-menu shortcuts, change **Destination**.  
+
+
+*For Steam games:* 
+  
+Your Steam library appears automatically. Open a game to change its artwork.
 Add [SteamGridDB API key](https://www.steamgriddb.com/profile/preferences/api) to browse artwork. Or use your own images without a key.
 
 Choose artwork for each game, then save your choices and use **Review changes** to apply them together. Steam will close while changes are applied and reopen afterwards.
-
-For games outside Steam, use <img src="docs/icons/add-games-folder.svg" width="16" height="16" alt="Add games folder" />, choose a game’s folder or a folder containing multiple games. Review the name, launcher and game match before adding them to Steam.
-
-To manage Desktop or Start-menu shortcuts, change **Destination**. These don’t require Steam.
 
 ## Undoing changes
 
@@ -39,7 +43,7 @@ the app data removes that saved record too.
 
 ## Building
 
-Install Node.js LTS, then run:
+Install Node.js LTS. Clone this repository, then open a terminal in the repository folder and run:
 
 ```bat
 npm ci
