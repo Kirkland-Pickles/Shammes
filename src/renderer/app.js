@@ -1931,9 +1931,6 @@ async function openArtModal(row, focusKind) {
   $('#art-q').setAttribute('aria-label', keyless ? 'Search Steam' : 'Search SteamGridDB');
   const writesSteam = row.source !== 'desktop' && (row.source === 'steam' || row.inSteam);
   $('#art-apply').hidden = !writesSteam;
-  $('#art-apply-note').textContent = writesSteam
-    ? 'save for batch apply, or apply one at a time'
-    : 'Select images, then save your choices.';
   $('#art-key-notice').hidden = !keyless;
   if (keyless) $('#art-key-notice-text').textContent = 'Search Steam for official artwork, or choose your own images.';
   $('#art-url').hidden = row.source === 'desktop';
