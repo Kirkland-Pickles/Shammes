@@ -639,8 +639,14 @@ async function fetchOneArt(c, gridFolder, stem, row, kind, changes = null, short
   if (!sel || sel.current) return { line: '', saved: false };
   let metadata;
   if (native && kind === 'icon') {
-    metadata = await native.metadata();
-    if (!/^[a-f0-9]{40}$/i.test(metadata.icon || '')) throw new Error('Steam icon cache filename is unavailable.');
+    metadata = await native.metadata().catch(() => ({}));
+    if (!/^[a-f0-9]{40}$/i.test(metadata.icon || '')) {
+      const local = steam.currentArtwork(cfg.steam_path, cfg.steam_user_id, row, 'icon', true);
+      const dir = path.join(cfg.steam_path, 'appcache', 'librarycache', stem);
+      const name = local && path.dirname(local) === dir && /^([a-f0-9]{40})\.jpg$/i.exec(path.basename(local));
+      if (!name) throw new Error('Steam icon cache filename is unavailable.');
+      metadata = { ...metadata, icon: name[1] };
+    }
   }
   let data = null;
   let src = '';

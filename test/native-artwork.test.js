@@ -537,7 +537,8 @@ it('does not download earlier automatic choices', async t => {
 
 it('saves native Steam icons and lets Purge restore them', async (t) => {
   const hash = 'a'.repeat(40);
-  const env = main(t, { icon: hash });
+  const metadata = { icon: hash };
+  const env = main(t, metadata, {}, { currentArtwork: (...args) => metadata.icon ? steam.currentArtwork(...args) : icon });
   const icon = path.join(env.root, 'appcache', 'librarycache', '123', `${hash}.jpg`);
   fs.mkdirSync(path.dirname(icon), { recursive: true });
   fs.writeFileSync(icon, 'original icon');
@@ -551,6 +552,10 @@ it('saves native Steam icons and lets Purge restore them', async (t) => {
   await env.invoke('steam:purge', { dryRun: false });
   assert.equal(fs.readFileSync(icon, 'utf8'), 'original icon');
   assert.equal(fs.readdirSync(env.grid).length, 0);
+  metadata.icon = '';
+  const fallback = await env.download(native({ icon: { url: 'https://test.invalid/icon.png' } }), { kinds: [] });
+  assert.equal(fallback.saved, 1);
+  assert.equal(fs.readFileSync(icon, 'utf8'), 'new artwork');
 });
 
 
