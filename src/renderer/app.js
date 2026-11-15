@@ -289,6 +289,7 @@ function steamCard() {
     return /steam\.exe$/i.test(s) ? s : `${s}\\steam.exe`;
   };
   const paintUsers = () => {
+    q('user').parentElement.hidden = S.steamUsers.length <= 1;
     q('user').innerHTML = S.steamUsers.map((u) =>
       `<option value="${esc(u.id)}"${u.id === S.cfg.steam_user_id ? ' selected' : ''}>${esc(userLabel(u))}</option>`).join('');
   };
@@ -475,6 +476,26 @@ function renderSettingsCards(key = keyCard()) {
   header.append($('h3', key), theme);
   key.prepend(header);
   host.appendChild(key);
+  if (S.steamUsers.length > 1) {
+    const accounts = document.createElement('fieldset');
+    accounts.className = 'steam-accounts';
+    accounts.innerHTML = `<legend>Steam account</legend><div class="account-options">${S.steamUsers.map((user, index) =>
+      `<label><input type="radio" name="steam-account" value="${esc(user.id)}"${user.id === S.cfg.steam_user_id ? ' checked' : ''}><span>${esc(user.name && user.name !== user.id ? user.name : `Account ${index + 1}`)}</span></label>`).join('')}</div>`;
+    accounts.addEventListener('change', handleAction('Steam account', async () => {
+      const selected = $('input:checked', accounts).value;
+      accounts.disabled = true;
+      try {
+        if (S.applyingSteam || S.loadingLibrary) throw new Error('Wait for the current operation to finish before switching accounts.');
+        await savePatch({ steam_user_id: selected });
+        S.rows = [];
+        await showLibrary();
+      } finally {
+        $$('input', accounts).forEach(input => { input.checked = input.value === S.cfg.steam_user_id; });
+        accounts.disabled = false;
+      }
+    }));
+    host.appendChild(accounts);
+  }
   const danger = document.createElement('div');
   danger.className = 'card settings-block';
   danger.innerHTML = `<h3>Danger zone</h3>

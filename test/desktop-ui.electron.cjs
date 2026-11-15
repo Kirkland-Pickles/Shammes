@@ -21,6 +21,8 @@ const downloadedIcon = nativeImage.createFromBitmap(Buffer.from([0, 0, 255, 255]
 const keyChecks = [];
 let foundLaunchers = [];
 let installedGames = [];
+let steamProfiles = [{ id: '1', name: 'Fixture' }];
+const steamReadAccounts = [];
 const handlers = {
   'cfg:get': () => cfg,
   'cfg:set': (patch) => {
@@ -35,7 +37,7 @@ const handlers = {
   },
   'steam:detect': () => {
     cfg = { ...cfg, steam_path: 'C:/Fixture/Steam', steam_user_id: '1' };
-    return { path: cfg.steam_path, users: [{ id: '1', name: 'Fixture' }] };
+    return { path: cfg.steam_path, users: steamProfiles };
   },
   'steam:verify': () => true,
   'steam:drafts-save': ({ scope, updates }) => {
@@ -62,7 +64,7 @@ const handlers = {
       appliedKinds: Object.keys(row.art), logoPositionApplied: row.logoPosition !== undefined })),
       lines: ['Artwork applied to Steam.'], saved: req.rows.reduce((n, row) => n + Object.keys(row.art).length, 0), failed: 0 };
   },
-  'steam:read': () => steamEntries,
+  'steam:read': () => { steamReadAccounts.push(cfg.steam_user_id); return steamEntries; },
   'steam:games': () => installedGames,
   'sgdb:by-steam': () => null,
   'scan:start': () => cfg.steam_executables,
@@ -137,6 +139,18 @@ app.whenReady().then(async () => {
   assert.equal(await run("document.querySelector('#library-setup').hidden"), false);
   assert.match(await run("document.querySelector('#log').textContent"), /\[\d{2}:\d{2}:\d{2}\]/);
   await capture('library');
+  assert.equal(await run("document.querySelector('.steam-accounts')"), null);
+  steamProfiles = [{ id: '1', name: 'First account' }, { id: '2', name: 'Second account' }];
+  await run('detectSteam().then(() => renderSettingsCards())');
+  assert.equal(await run("document.querySelectorAll('.steam-accounts input').length"), 2);
+  await click('.steam-accounts input[value="2"]');
+  await wait("!document.querySelector('.steam-accounts').disabled");
+  assert.equal(cfg.steam_user_id, '2');
+  assert.equal(steamReadAccounts.at(-1), '2');
+  await click('.steam-accounts input[value="1"]');
+  await wait("!document.querySelector('.steam-accounts').disabled");
+  assert.equal(cfg.steam_user_id, '1');
+  assert.equal(steamReadAccounts.at(-1), '1');
   await selectDestination('desktop');
   await wait("document.querySelector('#page-desktop').classList.contains('on') && document.querySelectorAll('#desktop-games tbody tr').length === 2");
   await idle();

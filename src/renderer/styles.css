@@ -455,3 +455,17 @@ button.game-open:hover:not(:disabled) { border-color: transparent; background: t
 #game-settings.native-game .manage-actions { grid-row: 1; }
 
 #game-settings select[size] { background-image: none; }
+
+.steam-accounts { margin-top: 18px; padding: 0; border: 0; min-width: 0; }
+.steam-accounts legend { margin-bottom: 10px; font-size: 10.5pt; font-weight: 600; }
+.account-options { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); }
+.account-options label { position: relative; display: block; cursor: pointer; }
+.account-options label + label { border-top: 1px solid var(--line); }
+.account-options input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.account-options span { display: block; padding: 8px 32px 8px 10px; color: var(--muted); overflow-wrap: anywhere; }
+.account-options label:hover span { background: var(--panel-raised); color: var(--fg); }
+.account-options input:checked + span { color: var(--fg); font-weight: 600; }
+.account-options input:checked + span::after { content: ''; position: absolute; right: 13px; top: 11px; width: 5px; height: 9px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.account-options input:focus-visible + span { box-shadow: inset 0 0 0 1px var(--field-focus); }
+.steam-accounts:disabled { opacity: .5; }
+#settings-cards > .steam-accounts + .card { margin-top: 18px; }
