@@ -2675,8 +2675,11 @@ function wireToolbar() {
       nWidthPct: Number($('#art-logo-width').value), nHeightPct: Number($('#art-logo-height').value) };
   });
   $('#art-logo-reset').addEventListener('click', () => { S.modal.logoPosition = null; renderLogoPosition(); });
-  $('#art-overlay').addEventListener('click', (e) => {
-    if (e.target.id === 'art-overlay') closeArtModal(false);
+  let artOverlayPressed = false;
+  $('#art-overlay').addEventListener('mousedown', e => { artOverlayPressed = e.target.id === 'art-overlay'; });
+  $('#art-overlay').addEventListener('click', e => {
+    if (artOverlayPressed && e.target.id === 'art-overlay') closeArtModal(false);
+    artOverlayPressed = false;
   });
   document.addEventListener('keydown', (e) => {
     if (S.exePicker) return;
