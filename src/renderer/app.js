@@ -814,7 +814,6 @@ function renderSteamGameSettings(row) {
   $('#d-name').disabled = locked;
   pick.disabled = locked;
   $('#d-browse').disabled = locked;
-  $('#d-apply').disabled = locked;
   $('#steam-launch-settings').hidden = locked;
   const launch = S.cfg.steam_launch?.[folderKey(row.folder)];
   $('#d-startdir').value = launch?.startDir ?? String(row.startDir || '').replace(/^"|"$/g, '');
@@ -1305,10 +1304,7 @@ async function doAddToSteam(targetRows, options = {}) {
 async function applyToSteam(targetRows, options = {}) {
   const selected = targetRows;
   const editing = steamEditorRow();
-  if (!options.reviewed && selected.includes(editing) && canWriteShortcut(editing)
-    && ($('#d-name').value.trim() !== editing.display || $('#d-exe-pick').value.trim() !== editing.exe
-      || $('#d-startdir').value.trim() !== (S.cfg.steam_launch?.[folderKey(editing.folder)]?.startDir ?? String(editing.startDir || '').replace(/^"|"$/g, ''))
-      || $('#d-args').value !== (S.cfg.steam_launch?.[folderKey(editing.folder)]?.launchOptions ?? editing.launchOptions ?? ''))) {
+  if (!options.reviewed && selected.includes(editing) && canWriteShortcut(editing) && steamLauncherChanged(editing)) {
     if (!await saveSteamLauncher()) return;
   }
   const native = selected.filter((r) => r.source === 'steam');
@@ -1996,11 +1992,12 @@ async function closeArtModal(save) {
     m.applying = true;
     $('#art-modal').inert = true;
     try {
+      if (m.row.source !== 'steam' && steamLauncherChanged(m.row) && !await saveSteamLauncher()) return;
       await saveSteamDrafts([{ ...m.row, art: m.sel,
         pendingArt: m.row.pendingArt || JSON.stringify(m.row.art || {}) !== JSON.stringify(m.sel || {}),
         sgdbId: m.sgdbId, sgdbName: m.games.find(game => game.id === m.sgdbId)?.name || m.row.sgdbName }]);
     } catch (error) {
-      artStatus(`Artwork choices could not be saved: ${error.message || error}`);
+      artStatus(`Choices could not be saved: ${error.message || error}`);
       return;
     } finally { m.applying = false; $('#art-modal').inert = false; }
   }
@@ -2543,9 +2540,6 @@ function wireToolbar() {
     if (row) openArtModal(row, e.target.closest('.game-open') ? 'grid' : 'manage');
     else selectRow(tr.dataset.key);
   });
-  $('#d-apply').addEventListener('click', handleAction('Save launcher details', async () => {
-    if (await saveSteamLauncher() && steamEditorRow()) renderSteamGameSettings(steamEditorRow());
-  }));
   $('#d-exe-pick').addEventListener('change', (e) => { e.target.title = e.target.value; });
   $('#d-browse').addEventListener('click', async () => {
     const r = steamEditorRow();
@@ -2706,6 +2700,12 @@ function wireToolbar() {
   document.addEventListener('mouseup', event => {
     if (event.button === 3 || event.button === 4) moveReview(event.button === 3 ? 'back' : 'fwd');
   });
+}
+
+function steamLauncherChanged(row) {
+  return $('#d-name').value.trim() !== row.display || $('#d-exe-pick').value.trim() !== (row.exe || '')
+    || $('#d-startdir').value.trim() !== (S.cfg.steam_launch?.[folderKey(row.folder)]?.startDir ?? String(row.startDir || '').replace(/^"|"$/g, ''))
+    || $('#d-args').value !== (S.cfg.steam_launch?.[folderKey(row.folder)]?.launchOptions ?? row.launchOptions ?? '');
 }
 
 async function saveSteamLauncher() {

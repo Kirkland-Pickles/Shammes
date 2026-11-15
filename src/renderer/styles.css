@@ -145,7 +145,6 @@ button.game-open:hover:not(:disabled) { border-color: transparent; background: t
 .control-combo { display: flex; align-items: center; gap: 6px; }
 .control-combo input, .control-combo select { flex: 1; min-width: 0; }
 .control-combo .btn { flex: 0 0 auto; }
-.section-action { margin-top: 11px; }
 #steam-launch-settings { margin-top: 12px; }
 #steam-launch-settings summary { cursor: pointer; color: var(--muted); }
 #steam-launch-settings[open] summary { margin-bottom: 8px; }
