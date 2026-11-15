@@ -120,8 +120,9 @@ function flyToastToLog(t) {
   t.classList.remove('show');
 }
 
-function toast(msg, logEntry) {
+function toast(msg, logEntry, subtle = false) {
   const t = $('#toast');
+  t.classList.toggle('subtle', subtle);
   const dialog = $$('dialog[open]').at(-1);
   const host = dialog || document.body;
   if (t.parentElement !== host) host.appendChild(t);
@@ -1982,7 +1983,7 @@ function artworkSelectionChanged(modal) {
     || JSON.stringify(modal.sel) !== JSON.stringify(modal.row.art || {});
 }
 
-async function closeArtModal(save) {
+async function closeArtModal(save, remind = false) {
   const m = S.modal;
   if (!m || m.applying) return;
   if (save && m.row.source !== 'desktop') {
@@ -2018,6 +2019,7 @@ async function closeArtModal(save) {
   if (save) {
     if (m.row.source === 'desktop') {
       renderDesktop();
+      if (remind && reviewCandidates('desktop').length) toast('Ready to review', null, true);
       restoreArtFocus(m);
       return;
     }
@@ -2032,6 +2034,7 @@ async function closeArtModal(save) {
     if (artworkChanged) m.row.pendingArt = true;
     S.cardArtCache.delete(coverToken(m.row));
     renderRows();
+    if (remind && reviewCandidates('library').length) toast('Ready to review', null, true);
     log(`'${m.row.display}': artwork selection updated.`);
   }
   restoreArtFocus(m);
@@ -2652,7 +2655,7 @@ function wireToolbar() {
     closeArtPreview();
   });
   $('#art-cancel').addEventListener('click', () => closeArtModal(false));
-  $('#art-save').addEventListener('click', () => closeArtModal(true));
+  $('#art-save').addEventListener('click', () => closeArtModal(true, true));
   $('#art-key-settings').addEventListener('click', () => {
     closeArtModal(false);
     $('#preferences').open = true;
