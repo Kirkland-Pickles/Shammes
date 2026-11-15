@@ -71,8 +71,28 @@ jobs:
             dist/${{ steps.files.outputs.portable }}
           if-no-files-found: error
 
-  publish:
+  attest:
     needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: dist
+
+      - name: Attest release files
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/*
+
+  publish:
+    needs: attest
     runs-on: windows-latest
     permissions:
       contents: write
