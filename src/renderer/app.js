@@ -2763,6 +2763,13 @@ async function saveSteamLauncher() {
 }
 
 async function boot() {
+  window.api.checkUpdate?.().then(version => {
+    if (!version) return;
+    const button = $('#update-available');
+    button.textContent = `${version} available`;
+    button.hidden = false;
+    button.onclick = () => window.api.openUrl('https://github.com/Kirkland-Pickles/lib-shammes/releases/latest');
+  }).catch(() => {});
   S.cfg = await window.api.cfgGet();
   const showIntro = !S.cfg.library_intro_seen && !S.cfg.steam_path && !S.cfg.api_key
     && !S.cfg.games_roots?.length && libraryView() === 'library';

@@ -439,6 +439,21 @@ ipcMain.handle('cover:cache-put', (_e, req) => {
 
 ipcMain.handle('shell:open', (_e, p) => shell.openPath(p));
 ipcMain.handle('util:open-url', (_e, url) => shell.openExternal(url));
+ipcMain.handle('util:check-update', async () => {
+  try {
+    const response = await fetch('https://api.github.com/repos/Kirkland-Pickles/lib-shammes/releases/latest', {
+      headers: { 'User-Agent': 'Lib-Shammes', Accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) return null;
+    const latest = (await response.json()).tag_name;
+    const parse = value => /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value || '');
+    const available = parse(latest), current = parse(app.getVersion());
+    if (!available || !current || available[4]) return null;
+    const order = available.slice(1, 4).join('.').localeCompare(current.slice(1, 4).join('.'), 'en', { numeric: true });
+    return order > 0 || (order === 0 && current[4]) ? latest : null;
+  } catch { return null; }
+});
 
 // ------------------------------------------------------------------ scan
 function scanFolders(req) {

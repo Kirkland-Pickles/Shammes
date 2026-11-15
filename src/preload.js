@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('api', {
   filesPickImage: () => ipcRenderer.invoke('files:pick-image'),
   shellOpen: (p) => ipcRenderer.invoke('shell:open', p),
   openUrl: (url) => ipcRenderer.invoke('util:open-url', url),
+  checkUpdate: () => ipcRenderer.invoke('util:check-update'),
   // sgdb
   keyValidate: (key) => ipcRenderer.invoke('key:validate', key),
   sgdbSearch: (q) => ipcRenderer.invoke('sgdb:search', q),

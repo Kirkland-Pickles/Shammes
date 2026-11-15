@@ -173,6 +173,7 @@ button.game-open:hover:not(:disabled) { border-color: transparent; background: t
 #statusbar { display: flex; align-items: center; gap: 12px; padding: 5px 26px; color: var(--muted); font-size: 8.5pt; }
 #status { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dock-toggle { min-height: 27px; padding: 0 5px; border: 0; color: var(--muted); background: transparent; font-size: 8.5pt; }
+#update-available { color: var(--accent); }
 
 /* Confirmation, picker and executable dialogs */
 #toast { position: fixed; z-index: 200; bottom: 46px; left: 50%; max-width: min(560px, 84vw); padding: 10px 14px; transform: translate(-50%, 10px); border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-raised); box-shadow: 0 8px 24px #0005; opacity: 0; pointer-events: none; transition: opacity .2s var(--ease), transform .24s var(--ease); }
