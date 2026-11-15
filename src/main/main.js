@@ -482,7 +482,7 @@ ipcMain.handle('desktop:scan', async () => {
   desktopJob = true;
   try {
     const games = cfg.games_roots.length ? scanFolders({ roots: cfg.games_roots }) : [];
-    return await desktop.discover([...games, ...savedExecutables('desktop')], cfg.desktop_destination);
+    return await desktop.discover([...games, ...savedExecutables('desktop')], 'both');
   } finally { desktopJob = false; }
 });
 ipcMain.handle('desktop:apply', async (_e, rows) => {
@@ -493,7 +493,8 @@ ipcMain.handle('desktop:apply', async (_e, rows) => {
     for (const result of results) if (result.ok || result.refreshed) {
       delete cfg.desktop_overrides[result.id];
       if (result.row) cfg.desktop_overrides[result.row.id] = { display: result.row.display, exe: result.row.exe,
-        sgdbId: result.row.sgdbId, sgdbName: result.row.sgdbName, signature: result.row.signature };
+        sgdbId: result.row.sgdbId, sgdbName: result.row.sgdbName, signature: result.row.signature,
+        choiceRevision: result.ok ? result.row.choiceRevision : undefined };
     }
     try { store.save(cfg); }
     catch (e) {

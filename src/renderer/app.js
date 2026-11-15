@@ -1428,6 +1428,7 @@ async function doPruneMissing() {  let stale;
 
 let desktopSave = Promise.resolve();
 const desktopEditFields = ['display', 'exe', 'args', 'admin', 'iconChoice', 'sgdbId', 'sgdbName'];
+const desktopChoiceFields = [...desktopEditFields, 'icon', 'iconIndex'];
 function groupDesktopDestinations(rows) {
   rows = rows.map(row => ({ ...row, destination: row.destination || 'desktop' }));
   const gameKey = row => folderKey(row.exePath || row.exe);
@@ -1450,11 +1451,22 @@ function groupDesktopDestinations(rows) {
   }
   return groups;
 }
+function desktopGameMembers(row) {
+  return S.desktop.groups?.find(group => group.includes(row)) || [row];
+}
 function desktopMembers(row) {
-  return S.desktop.groups?.find(group => group.includes(row))?.filter(member => S.desktop.rows.includes(member)) || [row];
+  const destination = S.cfg?.desktop_destination || 'both';
+  return desktopGameMembers(row).filter(member => destination === 'both' || member.destination === destination);
+}
+function desktopChoiceKey(row) {
+  return row.choiceKey || folderKey(row.exePath || row.exe);
+}
+function desktopChoiceState(choice, applied = false) {
+  return { ...choice, draft: applied ? null : choice || null,
+    art: choice?.iconChoice ? { icon: choice.iconChoice } : {}, saved: applied };
 }
 function desktopCards() {
-  return S.desktop.groups ? S.desktop.groups.map(group => group.find(row => S.desktop.rows.includes(row))).filter(Boolean) : S.desktop.rows;
+  return S.desktop.groups?.map(group => group[0]) || S.desktop.rows;
 }
 function desktopLocationState(members) {
   if (members.every(member => member.shortcut)) return 'Existing';
@@ -1463,18 +1475,21 @@ function desktopLocationState(members) {
 }
 function desktopApplyRows(cards) {
   return cards.flatMap(row => {
-    const shared = Object.fromEntries([...desktopEditFields, 'icon', 'iconIndex'].map(key => [key, row[key]]));
+    const choice = S.cfg?.desktop_choices?.[desktopChoiceKey(row)];
+    const shared = Object.fromEntries(desktopChoiceFields.map(key => [key, (choice || row)[key]]));
+    if (choice) shared.choiceRevision = choice.revision;
     return desktopMembers(row).map(member => ({ ...member, ...shared }));
   });
 }
 function saveDesktopDraft(row, update = row) {
-  const members = desktopMembers(row);
-  const edits = Object.fromEntries(desktopEditFields.map(key => [key, update[key]]));
-  const drafts = Object.fromEntries(members.map(member => [member.id, { ...edits, signature: member.signature }]));
+  const members = desktopGameMembers(row);
+  const key = desktopChoiceKey(row);
+  const edits = Object.fromEntries(desktopChoiceFields.map(field => [field, update[field]]));
   desktopSave = desktopSave.catch(() => {}).then(async () => {
-    await savePatch({ desktop_overrides: { ...S.cfg.desktop_overrides, ...drafts } });
+    const choice = { ...edits, revision: (S.cfg.desktop_choices?.[key]?.revision || 0) + 1 };
+    await savePatch({ desktop_choices: { ...S.cfg.desktop_choices, [key]: choice } });
     for (const member of members) {
-      Object.assign(member, edits, { saved: false, art: { ...(update.art || {}) }, draft: drafts[member.id] });
+      Object.assign(member, desktopChoiceState(choice), { choiceKey: key });
     }
   });
   return desktopSave;
@@ -1483,7 +1498,7 @@ function saveDesktopDraft(row, update = row) {
 async function refreshDesktop(force = true) {
   const d = S.desktop;
   if (d.busy) return;
-  const key = JSON.stringify([S.cfg.games_roots, S.cfg.folder_depths, S.cfg.desktop_executables, S.cfg.desktop_destination]);
+  const key = JSON.stringify([S.cfg.games_roots, S.cfg.folder_depths, S.cfg.desktop_executables]);
   if (!force && d.loadedKey === key) return;
   if (force) S.cardArtCache.clear();
   d.busy = true;
@@ -1492,10 +1507,30 @@ async function refreshDesktop(force = true) {
     await desktopSave;
     const old = new Map(d.rows.map((row) => [row.id, row]));
     const result = await window.api.desktopScan();
-    const groups = S.cfg.desktop_destination === 'both' ? groupDesktopDestinations(result.rows) : null;
-    d.rows = (groups ? groups.flat() : result.rows).map((row) => {
+    const groups = groupDesktopDestinations(result.rows);
+    const choices = { ...S.cfg.desktop_choices };
+    let migrated = false;
+    for (const group of groups) {
+      const key = desktopChoiceKey(group[0]);
+      for (const member of group) member.choiceKey = key;
+      if (choices[key]) continue;
+      const legacy = group.map(member => ({ member, draft: S.cfg.desktop_overrides[member.id] }))
+        .find(({ member, draft }) => draft && Object.hasOwn(draft, 'args') && draft.signature === member.signature);
+      if (!legacy) continue;
+      const saved = { ...legacy.member, ...legacy.draft };
+      choices[key] = { ...Object.fromEntries(desktopChoiceFields.map(field => [field, saved[field]])), revision: 1 };
+      migrated = true;
+    }
+    if (migrated) await savePatch({ desktop_choices: choices });
+    d.rows = groups.flat().map((row) => {
       const previous = old.get(row.id);
-      let draft = previous?.draft || S.cfg.desktop_overrides[row.id];
+      const choice = S.cfg.desktop_choices?.[row.choiceKey];
+      const record = S.cfg.desktop_overrides[row.id];
+      if (choice) {
+        const applied = record?.choiceRevision === choice.revision && record.signature === row.signature;
+        return { ...row, ...desktopChoiceState(choice, applied), source: 'desktop', error: '' };
+      }
+      let draft = previous?.draft || record;
       if (draft?.display === '(cached)' && draft.sgdbName === '(cached)' && row.query) {
         draft = { ...draft, display: row.query, sgdbName: row.query, exe: row.exe, args: row.args };
       }
@@ -1507,7 +1542,7 @@ async function refreshDesktop(force = true) {
         draft: stale || !pending ? null : draft, art: draft?.iconChoice && !stale ? { icon: draft.iconChoice } : {},
         saved: !stale && previous?.saved, error: '' };
     });
-    d.groups = groups?.map(group => group.map(row => d.rows.find(member => member.id === row.id))) || null;
+    d.groups = groups.map(group => group.map(row => d.rows.find(member => member.id === row.id)));
     for (const group of d.groups || []) {
       const source = group.find(row => row.draft) || group[0];
       const match = group.find(row => row.sgdbId);
@@ -1702,8 +1737,9 @@ async function applyDesktopShortcuts(rowsOverride, options = {}) {
     for (const result of results) {
       const row = d.rows.find((item) => item.id === result.id);
       if (result.ok || result.refreshed) {
-        if (result.row) Object.assign(row, result.row, { draft: null, art: {}, error: '', saved: result.ok });
-        else d.rows = d.rows.filter(item => item !== row);
+        const choice = S.cfg.desktop_choices?.[desktopChoiceKey(row)];
+        Object.assign(row, result.row || { shortcut: null, signature: undefined },
+          desktopChoiceState(choice, result.ok), { error: '' });
       } else row.error = result.error;
       log(`${row.display}: ${result.ok ? 'Shortcut saved.' : result.error}`, 'desktop');
       if (result.warning) log(result.warning, 'desktop');

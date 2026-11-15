@@ -292,23 +292,22 @@ it('allows updates to existing managed shortcuts', () => {
 });
 
 it('keeps Desktop matches without marking them as pending', async () => {
-  const rows = [1, 2].map(id => ({ id, display: 'Game ' + id, exe: 'game.exe', signature: 'same' }));
-  const { context, state } = renderer({ desktopScan: async () => ({ rows, warnings: [] }) });
-  vm.runInContext('renderDesktop = status = () => {};', context);
+  const rows = [1, 2].map(id => ({ id, display: 'Game ' + id, exe: `game${id}.exe`, signature: 'same' }));
+  const { context, state } = renderer({ desktopScan: async () => ({ rows, warnings: [] }), cfgSet: async patch => ({ ...state.cfg, ...patch }) });
+  vm.runInContext('renderDesktop = status = applyTheme = () => {};', context);
   state.cfg = { games_roots: [], desktop_overrides: {
-    1: { display: 'Saved game', exe: 'game.exe', sgdbId: 7, sgdbName: 'Matched title', signature: 'same' },
-    2: { display: 'Edited game', exe: 'game.exe', args: '', signature: 'same', iconChoice: { file: 'chosen.ico' } },
+    1: { display: 'Saved game', exe: 'game1.exe', sgdbId: 7, sgdbName: 'Matched title', signature: 'same' },
+    2: { display: 'Edited game', exe: 'game2.exe', args: '', signature: 'same', iconChoice: { file: 'chosen.ico' } },
   } };
   await vm.runInContext('refreshDesktop()', context);
   assert.equal(state.desktop.rows[0].display, 'Saved game');
   assert.equal(state.desktop.rows[0].sgdbId, 7);
   assert.equal(state.desktop.rows[0].draft, null);
-  assert.equal(state.desktop.rows[1].draft.iconChoice.file, 'chosen.ico');
+  assert.equal(state.desktop.rows[2].draft.iconChoice.file, 'chosen.ico');
   rows[1].signature = 'external edit';
   await vm.runInContext('refreshDesktop()', context);
   assert.equal(state.desktop.rows[0].sgdbId, 7);
-  assert.equal(state.desktop.rows[1].draft, null);
-  assert.equal(state.desktop.rows[1].iconChoice, undefined);
+  assert.equal(state.desktop.rows[2].draft.iconChoice.file, 'chosen.ico');
   rows[0].signature = 'external arguments';
   await vm.runInContext('refreshDesktop()', context);
   assert.equal(state.desktop.rows[0].sgdbId, 7);
@@ -367,11 +366,12 @@ it('groups shortcuts by exe despite different names or arguments', async () => {
   context.edited.display = 'Renamed';
   context.edited.iconChoice = { file: 'new.ico' };
   await vm.runInContext('saveDesktopDraft(edited)', context);
-  assert.equal(state.cfg.desktop_overrides[menu.id].display, 'Renamed');
-  assert.equal(state.cfg.desktop_overrides[menu.id].iconChoice.file, 'new.ico');
-  assert.equal(state.cfg.desktop_overrides[menu.id].signature, 'menu-sig');
-  assert.equal(state.cfg.desktop_overrides[menu.id].args, '-one');
-  assert.equal(state.cfg.desktop_overrides[desktop.id].signature, 'desktop-sig');
+  assert.equal(state.cfg.desktop_choices['game.exe'].display, 'Renamed');
+  assert.equal(state.cfg.desktop_choices['game.exe'].iconChoice.file, 'new.ico');
+  assert.equal(state.cfg.desktop_choices['game.exe'].args, '-one');
+  assert.deepEqual(Object.keys(state.cfg.desktop_overrides), []);
+  assert.equal(state.desktop.groups[0][1].signature, 'menu-sig');
+  assert.equal(state.desktop.groups[0][0].signature, 'desktop-sig');
   assert.equal(state.desktop.groups[1][0].display, 'Another game');
 });
 
@@ -379,7 +379,7 @@ it('recovers shortcut names previously saved as cached', async () => {
   const row = { id: 'link:cached', display: '(cached)', query: 'Resolved game', exe: 'game.exe',
     shortcut: 'Desktop/(cached).lnk', signature: 'original' };
   const { context, state } = renderer({ desktopScan: async () => ({ rows: [row], warnings: [] }) });
-  vm.runInContext('renderDesktop = status = () => {};', context);
+  vm.runInContext('renderDesktop = status = applyTheme = () => {};', context);
   state.cfg = { games_roots: [], desktop_overrides: { [row.id]: {
     display: '(cached)', sgdbId: 7, sgdbName: '(cached)', signature: 'original',
   } } };
@@ -674,4 +674,54 @@ it('keeps paired icon drafts unchanged when saving fails', async () => {
   assert.equal(second.iconChoice.file, 'old.ico');
   assert.equal(first.draft, undefined);
   assert.equal(second.draft, undefined);
+});
+
+
+it('shares Windows choices across destinations and restart', async () => {
+  let disk = { games_roots: [], desktop_destination: 'desktop', desktop_overrides: {}, desktop_choices: {} };
+  let scans = 0;
+  const rows = ['desktop', 'start-menu'].map(destination => ({
+    id: destination, destination, shortcut: `${destination}/Game.lnk`, signature: destination,
+    exe: 'C:/Games/game.exe', display: 'Game', args: '', icon: '', iconIndex: 0,
+  }));
+  const api = {
+    desktopScan: async () => { scans++; return { rows: structuredClone(rows), warnings: [] }; },
+    cfgSet: async patch => (disk = { ...disk, ...structuredClone(patch) }),
+  };
+  const load = async () => {
+    const view = renderer(api);
+    view.state.cfg = structuredClone(disk);
+    view.run = code => vm.runInContext(code, view.context);
+    view.run('renderDesktop = status = applyTheme = () => {};');
+    await view.run('refreshDesktop(false)');
+    return view;
+  };
+  let view = await load();
+  view.context.game = view.state.desktop.rows[0];
+  await view.run("saveDesktopDraft(game, { ...game, display: 'Chosen name', args: '-chosen', iconChoice: { file: 'chosen.ico' } })");
+  assert.equal(Object.keys(disk.desktop_choices).length, 1);
+  assert.equal(Object.keys(disk.desktop_overrides).length, 0);
+  for (const restart of [false, true]) {
+    if (restart) view = await load();
+    const original = view.state.desktop.rows[0], scansBefore = scans;
+    for (const destination of ['both', 'start-menu', 'desktop']) {
+      view.state.cfg.desktop_destination = destination;
+      await view.run('refreshDesktop(false)');
+      assert.equal(view.state.desktop.rows[0], original);
+      const payload = view.run('desktopApplyRows(desktopCards())');
+      assert.deepEqual(Array.from(payload, row => [row.destination, row.signature, row.display, row.args, row.iconChoice.file]),
+        (destination === 'both' ? ['desktop', 'start-menu'] : [destination])
+          .map(target => [target, target, 'Chosen name', '-chosen', 'chosen.ico']));
+    }
+    assert.equal(scans, scansBefore);
+  }
+  disk.desktop_overrides.desktop = { signature: 'desktop', choiceRevision: 1 };
+  view = await load();
+  assert.equal(view.state.desktop.rows[0].draft, null);
+  assert.ok(view.state.desktop.rows[1].draft);
+  assert.equal(view.state.desktop.rows[0].iconChoice.file, 'chosen.ico');
+  for (const destination of ['desktop', 'start-menu']) {
+    view.state.cfg.desktop_destination = destination;
+    assert.equal(view.run("reviewCandidates('desktop').length"), destination === 'desktop' ? 0 : 1);
+  }
 });

@@ -14,7 +14,7 @@ let failNextArtList = false;
 const artRequests = [];
 const artworkWrites = [];
 const rows = [1, 2].map((i) => ({ id: `link:${i}`, shortcut: `C:\\Desktop\\Variant ${i}.lnk`, signature: 'original',
-  display: `Variant ${i}`, exe: 'C:\\Games\\Game.exe', args: `-profile ${i}`, admin: false, icon: 'C:\\Icons\\game.ico', iconIndex: 0,
+  display: `Variant ${i}`, exe: `C:\\Games\\Game${i}.exe`, args: `-profile ${i}`, admin: false, icon: 'C:\\Icons\\game.ico', iconIndex: 0,
   confidence: 1, candidates: [{ path: 'C:\\Games\\Game.exe' }] }));
 const icon = nativeImage.createFromBitmap(Buffer.alloc(16, 255), { width: 2, height: 2 }).toDataURL();
 const downloadedIcon = nativeImage.createFromBitmap(Buffer.from([0, 0, 255, 255]), { width: 1, height: 1 }).toDataURL();
@@ -73,7 +73,11 @@ const handlers = {
     writes++;
     if (pauseApply) await new Promise((resolve) => { finishApply = resolve; });
     return selected.map((row) => {
-      if (!externalChange) return { id: row.id, ok: true, row };
+      if (!externalChange) {
+        cfg.desktop_overrides[row.id] = { display: row.display, exe: row.exe, sgdbId: row.sgdbId,
+          sgdbName: row.sgdbName, signature: row.signature, choiceRevision: row.choiceRevision };
+        return { id: row.id, ok: true, row: { ...row, iconChoice: null } };
+      }
       delete cfg.desktop_overrides[row.id];
       return { id: row.id, ok: false, refreshed: true, error: 'Shortcut refreshed. Review changes and apply again.',
         row: externalChange === 'removed' ? null : { ...row, args: '-external', signature: 'changed', iconChoice: null } };
@@ -149,7 +153,7 @@ app.whenReady().then(async () => {
   await run("document.querySelector('#desktop-game-settings details').open = true");
   assert.ok(await run("document.querySelector('.desktop-admin input').labels.length > 0"));
   await change('#desktop-game-settings [data-field=args]', '-edited');
-  await wait(() => cfg.desktop_overrides['link:1']?.args === '-edited');
+  await wait(() => cfg.desktop_choices['c:\\games\\game1.exe']?.args === '-edited');
   await click('#art-cancel');
   await wait("document.querySelector('#art-overlay').hidden");
   await run("document.querySelector('#desktop-refresh').click(); document.querySelector('#desktop-refresh').click()");
@@ -263,7 +267,7 @@ app.whenReady().then(async () => {
     field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   }`);
   await click('#art-save');
-  await wait(() => cfg.desktop_overrides['link:1']?.sgdbId === 17);
+  await wait(() => cfg.desktop_choices['c:\\games\\game1.exe']?.sgdbId === 17);
   await wait("document.querySelector('#art-overlay').hidden");
 
   await click('#desktop-add');
@@ -298,7 +302,7 @@ app.whenReady().then(async () => {
   await click('#confirm-overlay [data-v="1"]');
   await idle();
   await click('#desktop-games .game-name');
-  assert.equal(await run("document.querySelector('#desktop-game-settings [data-field=args]').value"), '-external');
+  assert.equal(await run("document.querySelector('#desktop-game-settings [data-field=args]').value"), '-edited');
   await click('#art-cancel');
   await wait("document.querySelector('#art-overlay').hidden");
   assert.equal(cfg.desktop_overrides['link:1'], undefined);
@@ -326,8 +330,8 @@ app.whenReady().then(async () => {
   await wait("!!document.querySelector('#confirm-overlay')");
   await click('#confirm-overlay [data-v="1"]');
   await idle();
-  assert.equal(await run("document.querySelectorAll('#desktop-games tbody tr').length"), 1);
-  assert.equal(await run("document.querySelector('#desktop-games .game-name').textContent"), 'Variant 2');
+  assert.equal(await run("document.querySelectorAll('#desktop-games tbody tr').length"), 2);
+  assert.equal(await run("document.querySelector('#desktop-games .game-name').textContent"), 'Matched game');
   assert.equal(cfg.desktop_overrides['link:1'], undefined);
   steamEntries = [{ managed: true, appName: 'Old name', exe: 'C:/Games/game.exe', index: 0, appid: 1 }];
   await selectDestination('steam');
@@ -404,13 +408,15 @@ app.whenReady().then(async () => {
   await change('#desktop-destination', 'start-menu');
   await wait(() => cfg.desktop_destination === 'start-menu');
   await idle();
-  assert.equal(await run("document.querySelector('#desktop-add').textContent"), 'Review changes');
+  assert.equal(await run("document.querySelector('#desktop-add').textContent"), 'Review 1 change');
+  rows[1].exe = rows[0].exe;
   rows[1].destination = 'start-menu';
   rows[1].shortcut = 'C:\\Programs\\Other name.lnk';
   await change('#desktop-destination', 'both');
   await wait(() => cfg.desktop_destination === 'both');
+  await click('#desktop-refresh');
   await idle();
-  assert.equal(await run("document.querySelector('#desktop-add').textContent"), 'Review changes');
+  assert.equal(await run("document.querySelector('#desktop-add').textContent"), 'Review 1 change');
   assert.equal(await run("document.querySelector('#desktop-count').textContent"), '1 game');
   assert.equal(await run("document.querySelectorAll('#desktop-games .game-card-row').length"), 1);
   assert.equal(await run("document.querySelector('#desktop-games .source-label').textContent"), 'Desktop + Start menu');
@@ -418,7 +424,7 @@ app.whenReady().then(async () => {
   await click('#desktop-games .game-name');
   await run("document.querySelector('#desktop-game-settings details').open = true");
   await change('#desktop-game-settings [data-field=display]', 'Paired variant');
-  await wait(() => Object.values(cfg.desktop_overrides).filter(row => row.display === 'Paired variant').length === 2);
+  await wait(() => Object.values(cfg.desktop_choices).some(row => row.display === 'Paired variant'));
   await click('#desktop-game-apply');
   await wait("!!document.querySelector('#confirm-overlay')");
   await click('#confirm-overlay [data-v="1"]');

@@ -26,6 +26,7 @@ const DEFAULTS = {
   steam_launch: {},
   steam_art_drafts: {},
   desktop_overrides: {},
+  desktop_choices: {},
   desktop_executables: [],
   desktop_destination: 'desktop',
   steam_executables: [],
