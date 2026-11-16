@@ -6,6 +6,25 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+it('falls back to defaults for config values with the wrong type', t => {
+  const td = fs.mkdtempSync(path.join(os.tmpdir(), 'config-'));
+  const previous = process.env.APPDATA;
+  process.env.APPDATA = td;
+  t.after(() => {
+    if (previous === undefined) delete process.env.APPDATA;
+    else process.env.APPDATA = previous;
+    fs.rmSync(td, { recursive: true, force: true });
+  });
+  store.save(structuredClone(store.DEFAULTS));
+  const malformed = { games_roots: 'D:/Games', steam_path: 123, title_map: [], steam_launch: null, scan_depth: 'deep', theme: 'light' };
+  fs.writeFileSync(path.join(store.configDir(), 'config.json'), JSON.stringify(malformed));
+  const cfg = store.load();
+  assert.deepEqual(cfg, { ...store.DEFAULTS, theme: 'light' });
+  assert.deepEqual(store.sanitizePatch(malformed), { theme: 'light' });
+  store.save({ ...cfg, games_roots: ['D:/Games', null, 123, {}, ''] });
+  assert.deepEqual(store.load().games_roots, ['D:/Games']);
+});
+
 describe('folder depths', () => {
   it('loads existing folder depths and preserves zero', () => {
     const td = fs.mkdtempSync(path.join(os.tmpdir(), 'config-'));

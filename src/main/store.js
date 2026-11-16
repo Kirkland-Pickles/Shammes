@@ -52,7 +52,7 @@ function configPath() {
 }
 
 function dedupe(list) {
-  return [...new Set((list || []).filter(Boolean))];
+  return [...new Set((Array.isArray(list) ? list : []).filter(item => typeof item === 'string' && item.trim()))];
 }
 
 // Crash-safe write: temp file + rename, so a mid-write crash never leaves a
@@ -65,15 +65,13 @@ function writeFileAtomic(filePath, text) {
 }
 
 function load() {
-  const cfg = { ...DEFAULTS };
+  const cfg = structuredClone(DEFAULTS);
   // load AppData first, then check for an old portable config
   for (const p of [configPath(), path.join(legacyConfigDir(), 'config.json'), path.join(process.cwd(), 'config.json')]) {
     try {
       if (!fs.existsSync(p)) continue;
       const data = JSON.parse(fs.readFileSync(p, 'utf8'));
-      for (const k of Object.keys(DEFAULTS)) {
-        if (data[k] !== undefined) cfg[k] = data[k];
-      }
+      Object.assign(cfg, sanitizePatch(data));
       break;
     } catch { /* unreadable config - try the next location */ }
   }
@@ -101,7 +99,13 @@ function sanitizePatch(patch) {
   const clean = {};
   if (!patch || typeof patch !== 'object') return clean;
   for (const k of Object.keys(DEFAULTS)) {
-    if (patch[k] !== undefined) clean[k] = patch[k];
+    const value = patch[k], expected = DEFAULTS[k];
+    const record = value !== null && typeof value === 'object' && !Array.isArray(value);
+    const valid = Array.isArray(expected) ? Array.isArray(value)
+      : expected === null ? value === null || record
+        : typeof expected === 'object' ? record
+          : typeof value === typeof expected && (typeof value !== 'number' || Number.isFinite(value));
+    if (valid) clean[k] = value;
   }
   return clean;
 }
