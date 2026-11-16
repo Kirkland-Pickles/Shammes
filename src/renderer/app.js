@@ -694,10 +694,12 @@ function updateLibraryActions() {
   $('#library-pending').textContent = pending ? `${pending} ready to apply` : '';
   const button = $('#btn-add');
   const busy = S.applyingSteam || S.loadingLibrary;
-  button.disabled = busy || !reviewCandidates('library').length;
-  $('#btn-clear').disabled = busy;
   const count = reviewCandidates('library').length;
-  button.textContent = count ? `Review ${count} change${count === 1 ? '' : 's'}` : 'Review changes';
+  const missingCount = missingShortcuts('library').length;
+  button.disabled = busy || (!count && !missingCount);
+  $('#btn-clear').disabled = busy;
+  button.textContent = count ? `Review ${count} change${count === 1 ? '' : 's'}`
+    : missingCount ? 'Add to Steam' : 'Review changes';
   $('#btn-refresh').disabled = busy;
 }
 
@@ -1602,10 +1604,12 @@ function renderDesktop() {
   const d = S.desktop;
   const visible = desktopVisible();
   const reviewCount = reviewCandidates('desktop').length;
-  $('#desktop-add').textContent = reviewCount ? `Review ${reviewCount} change${reviewCount === 1 ? '' : 's'}` : 'Review changes';
+  const missingCount = missingShortcuts('desktop').length;
+  $('#desktop-add').textContent = reviewCount ? `Review ${reviewCount} change${reviewCount === 1 ? '' : 's'}`
+    : missingCount ? 'Create shortcuts' : 'Review changes';
   const cards = desktopCards();
   $('#desktop-count').textContent = `${cards.length} game${cards.length === 1 ? '' : 's'}`;
-  const pending = cards.filter(row => desktopMembers(row).some(member => member.draft)).length;
+  const pending = reviewCount;
   $('#desktop-pending').hidden = pending === 0;
   $('#desktop-pending').textContent = pending ? `${pending} ready to apply` : '';
   $('#desktop-grid-count').textContent = visible.length === cards.length ? '' : `${visible.length} game${visible.length === 1 ? '' : 's'} shown`;
@@ -1653,7 +1657,7 @@ function renderDesktop() {
     else loadCardCover(row, tr);
   }
   for (const id of ['desktop-add', 'desktop-refresh']) $('#' + id).disabled = d.busy;
-  $('#desktop-add').disabled ||= !reviewCandidates('desktop').length;
+  $('#desktop-add').disabled ||= !reviewCount && !missingCount;
   $('#desktop-games').inert = d.busy && !d.applying;
   for (const id of ['desktop-hide']) $('#' + id).disabled = d.busy && !d.applying;
 }
@@ -2853,14 +2857,22 @@ function reviewCandidates(destination) {
   const rows = S.rows.filter(row => row.pendingArt || row.pendingDetails);
   return rows.filter(row => canWriteShortcut(row) || row.source === 'steam' && row.pendingArt);
 }
+function missingShortcuts(destination) {
+  if (destination !== 'desktop') return S.rows.filter(row => canWriteShortcut(row)
+    && !row.inSteam && !row.pendingArt && !row.pendingDetails);
+  return desktopCards().filter(row => row.exe && !desktopMembers(row).some(member => member.draft)
+    && desktopMembers(row).some(member => !member.shortcut));
+}
 function reviewScope(destination) {
   return destination === 'desktop' ? String(S.cfg.desktop_destination || 'desktop') : steamDraftScope();
 }
 function openReview(destination) {
   if (S.applyingSteam || S.loadingLibrary || S.desktop.busy) return;
   const rows = reviewCandidates(destination);
-  if (!rows.length) { toast('Save artwork or shortcut changes first.'); return; }
-  S.review = { destination, scope: reviewScope(destination), rows: rows.slice(), included: new Set(rows) };
+  const optional = missingShortcuts(destination);
+  if (!rows.length && !optional.length) { toast('Save artwork or shortcut changes first.'); return; }
+  S.review = { destination, scope: reviewScope(destination), rows: [...rows, ...optional],
+    savedCount: rows.length, included: new Set(rows) };
   const panel = $('#page-review');
   panel.showModal();
   renderReview();
@@ -2870,16 +2882,25 @@ function renderReview() {
   if (!review) return;
   const desktop = review.destination === 'desktop';
   const destination = desktop ? ({ desktop: 'Desktop', 'start-menu': 'Start menu', both: 'Desktop and Start menu' }[S.cfg.desktop_destination || 'desktop']) : 'Steam';
+  $('#review-title').textContent = !review.savedCount
+    ? desktop ? 'Create shortcuts' : 'Add to Steam' : 'Review changes';
   $('#review-summary').textContent = `${review.included.size} of ${review.rows.length} games selected for ${destination}`;
   $('#review-note').textContent = desktop
-    ? 'Review the games below. Existing shortcuts will be updated; missing shortcuts will be created. Your game files are not changed.'
+    ? 'Choose which shortcuts to create or update. Your game files are not changed.'
     : 'Review the games below. New games become non-Steam shortcuts. Saved artwork and launcher changes are applied together. Steam closes and reopens if it is running.';
   $('#review-apply').textContent = `Apply to ${destination}`;
   $('#review-apply').disabled = !review.included.size;
   $('#review-status').textContent = 'Nothing has been applied yet.';
   const host = $('#review-list');
   host.replaceChildren();
-  for (const row of review.rows) {
+  for (const [index, row] of review.rows.entries()) {
+    if (index === 0 || index === review.savedCount) {
+      const heading = document.createElement('h2');
+      heading.className = 'review-section-title';
+      heading.textContent = index < review.savedCount ? 'Saved changes'
+        : desktop ? 'Create missing shortcuts' : 'Add missing shortcuts';
+      host.appendChild(heading);
+    }
     const label = document.createElement('label');
     label.className = 'review-row';
     const action = desktop ? (desktopMembers(row).every(member => member.shortcut) ? 'Update shortcut' : 'Create missing shortcuts')

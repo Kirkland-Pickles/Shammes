@@ -678,6 +678,18 @@ it('keeps paired icon drafts unchanged when saving fails', async () => {
 });
 
 
+it('selects saved edits but leaves missing shortcuts unchecked', () => {
+  const view = renderer({});
+  view.state.cfg = {};
+  const missing = { source: 'folder', exe: 'new.exe' };
+  const edited = { source: 'folder', exe: 'edited.exe', pendingDetails: true };
+  view.state.rows = [missing, edited];
+  view.context.document.querySelector = () => ({ showModal() {} });
+  vm.runInContext('renderReview = () => {}; openReview("library");', view.context);
+  assert.deepEqual(Array.from(view.state.review.rows), [edited, missing]);
+  assert.deepEqual([...view.state.review.included], [edited]);
+});
+
 it('shares Windows choices across destinations and restart', async () => {
   let disk = { games_roots: [], desktop_destination: 'desktop', desktop_overrides: {}, desktop_choices: {} };
   let scans = 0;
