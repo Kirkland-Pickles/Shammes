@@ -2051,8 +2051,6 @@ function renderLogoPosition() {
   const position = m?.logoPosition !== undefined ? m.logoPosition : m?.initialLogoPosition;
   $('#art-logo-anchor').value = position?.pinnedPosition || 'BottomLeft';
   $$('[data-logo-anchor]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.logoAnchor === $('#art-logo-anchor').value)));
-  $('#art-logo-width').value = position?.nWidthPct || 50;
-  $('#art-logo-height').value = position?.nHeightPct || 50;
 }
 
 function restoreArtFocus(m) {
@@ -2609,9 +2607,8 @@ function wireToolbar() {
       renderLogoPosition();
     };
   });
-  for (const id of ['art-logo-anchor', 'art-logo-width', 'art-logo-height']) $('#' + id).addEventListener('change', () => {
-    S.modal.logoPosition = { pinnedPosition: $('#art-logo-anchor').value,
-      nWidthPct: Number($('#art-logo-width').value), nHeightPct: Number($('#art-logo-height').value) };
+  $('#art-logo-anchor').addEventListener('change', () => {
+    S.modal.logoPosition = { pinnedPosition: $('#art-logo-anchor').value };
   });
   $('#art-logo-reset').addEventListener('click', () => { S.modal.logoPosition = null; renderLogoPosition(); });
   let artOverlayPressed = false;

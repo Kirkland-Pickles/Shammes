@@ -137,13 +137,14 @@ it('keeps logo settings and backs up position changes', async t => {
   const env = main(t);
   fs.mkdirSync(env.grid, { recursive: true });
   const file = path.join(env.grid, '123.json');
-  const initial = { nVersion: 1, logoPosition: { pinnedPosition: 'BottomLeft', nWidthPct: 50, nHeightPct: 50 }, other: true };
+  const initial = { nVersion: 1, logoPosition: { pinnedPosition: 'BottomLeft', nWidthPct: 60, nHeightPct: 40 }, other: true };
   fs.writeFileSync(file, JSON.stringify(initial));
   const row = native();
-  row.logoPosition = { pinnedPosition: 'CenterCenter', nWidthPct: 60, nHeightPct: 40 };
+  row.logoPosition = { pinnedPosition: 'CenterCenter' };
   let result = await env.download(row, { kinds: [] });
   assert.equal(result.saved, 1);
   assert.equal(JSON.parse(fs.readFileSync(file)).other, true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file)).logoPosition, { ...initial.logoPosition, pinnedPosition: 'CenterCenter' });
   row.logoPosition = null;
   result = await env.download(row, { kinds: [] });
   assert.equal(result.saved, 1);

@@ -824,16 +824,15 @@ function artworkBackup(changes) {
 }
 function saveLogoPosition(gridFolder, stem, row, beforeWrite) {
   const position = row.logoPosition;
-  if (position && (!['BottomLeft', 'UpperLeft', 'CenterCenter', 'UpperCenter', 'BottomCenter'].includes(position.pinnedPosition)
-    || ![position.nWidthPct, position.nHeightPct].every(n => Number.isFinite(n) && n >= 1 && n <= 100))) {
-    throw new Error('Choose a valid logo position and size.');
+  if (position && !['BottomLeft', 'UpperLeft', 'CenterCenter', 'UpperCenter', 'BottomCenter'].includes(position.pinnedPosition)) {
+    throw new Error('Choose a valid logo position.');
   }
   const file = path.join(gridFolder, `${stem}.json`);
   let data = {};
   try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw e; }
   const finish = beforeWrite(file, false);
   try {
-    if (position) data.logoPosition = position;
+    if (position) data.logoPosition = { nWidthPct: 50, nHeightPct: 50, ...data.logoPosition, pinnedPosition: position.pinnedPosition };
     else delete data.logoPosition;
     store.writeFileAtomic(file, JSON.stringify({ nVersion: 1, ...data }));
   } finally { finish(); }

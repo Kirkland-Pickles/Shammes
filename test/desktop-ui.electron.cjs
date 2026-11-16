@@ -392,7 +392,7 @@ app.whenReady().then(async () => {
   await run("[...document.querySelectorAll('#art-tabs button')].find(button => button.textContent.startsWith('Logo')).click()");
   await wait("!document.querySelector('#art-logo-position').hidden && document.querySelectorAll('#art-grid > .thumb').length > 0");
   await click('#art-grid > .thumb .thumb-select');
-  await change('#art-logo-width', '60');
+  await click('[data-logo-anchor="UpperCenter"]');
   await click('#art-save');
   await wait("document.querySelector('#art-overlay').hidden");
   assert.equal(artworkWrites.length, 0);
@@ -400,7 +400,7 @@ app.whenReady().then(async () => {
   await wait("document.querySelectorAll('#art-grid > .thumb').length > 0");
   await run("[...document.querySelectorAll('#art-tabs button')].find(button => button.textContent.startsWith('Logo')).click()");
   await wait("!document.querySelector('#art-logo-position').hidden && document.querySelectorAll('#art-grid > .thumb').length > 0");
-  await change('#art-logo-width', '70');
+  await click('[data-logo-anchor="CenterCenter"]');
   await click('#art-save');
   await wait("document.querySelector('#art-overlay').hidden");
   await click('#btn-add');
@@ -409,7 +409,7 @@ app.whenReady().then(async () => {
   await wait(`!document.querySelector('#games .game-cover').hidden && document.querySelector('#games .game-cover').src === ${JSON.stringify(downloadedIcon)}`);
   assert.equal(artworkWrites.length, 1);
   assert.deepEqual(Object.keys(artworkWrites[0].rows[0].art).sort(), ['grid', 'logo']);
-  assert.equal(artworkWrites[0].rows[0].logoPosition.nWidthPct, 70);
+  assert.equal(artworkWrites[0].rows[0].logoPosition.pinnedPosition, 'CenterCenter');
   assert.equal(artworkWrites[0].kinds.length, 0);
   await click('#games .game-open');
   await run("[...document.querySelectorAll('#art-tabs button')].find(button => button.textContent === 'Manage').click()");
