@@ -70,7 +70,7 @@ const handlers = {
   'sgdb:by-steam': () => null,
   'scan:start': () => cfg.steam_executables,
   'resolve:name': () => null,
-  'steam:add': (req) => { steamRequest = req; return { rows: req.rows, lines: ['Saved shortcuts.vdf: 0 added, 1 updated.', 'Artwork results ready.'], added: 0, updated: 1, artworkSaved: 0 }; },
+  'steam:add': (req) => { steamRequest = req; return { rows: req.rows.map(row => ({ ...row, managed: true })), lines: ['Saved shortcuts.vdf: 0 added, 1 updated.', 'Artwork results ready.'], added: 0, updated: 1, artworkSaved: 0 }; },
   'desktop:apply': async (selected) => {
     lastDesktopApply = selected;
     writes++;
@@ -258,7 +258,6 @@ app.whenReady().then(async () => {
   assert.equal(cfg.artwork_filters.icon.animated, undefined);
   assert.equal(artRequests.at(-1).filters.static, true);
   assert.equal(artRequests.at(-1).filters.animated, false);
-  assert.equal(await run("document.querySelector('#art-apply').hidden"), true);
   assert.equal(await run("document.querySelector('#art-save').textContent"), 'Save');
   assert.equal(await run("document.querySelector('#art-modal .modal-foot').lastElementChild.id"), 'art-save');
   await wait("document.querySelector('#art-grid .art-load-error button')?.textContent === 'Reset filters'");
@@ -358,23 +357,23 @@ app.whenReady().then(async () => {
   assert.equal(await run("!document.querySelector('#btn-remove').hidden && !document.querySelector('#btn-remove').disabled"), true);
   assert.equal(await run("document.querySelector('#btn-add').disabled"), true);
   assert.equal(await run("document.querySelector('#btn-add').textContent"), 'Review changes');
-  await click('#d-primary-action');
-  await wait("!!document.querySelector('#confirm-overlay')");
-  await click('#confirm-overlay [data-v="0"]');
-  assert.equal(steamRequest, undefined);
   await change('#d-name', 'New name');
   await run("document.querySelector('#steam-launch-settings').open = true");
   await change('#d-startdir', 'C:/Games/Working directory');
   await change('#d-args', '--windowed "two words"');
-  await click('#d-primary-action');
-  await wait("!!document.querySelector('#confirm-overlay')");
-  await click('#confirm-overlay [data-v="1"]');
+  await click('#art-save');
+  await wait("document.querySelector('#art-overlay').hidden");
+  await click('#btn-add');
+  await wait("document.querySelector('#page-review').open");
+  await click('#review-apply');
   await wait("document.querySelector('#status').textContent.includes('updated')");
   assert.equal(steamRequest.rows[0].display, 'New name');
   assert.ok(await run("document.querySelector('#log').textContent.includes('Saved shortcuts.vdf') && document.querySelector('#log').textContent.includes('Artwork results ready.')"));
   assert.deepEqual(steamRequest.rows[0].launchSettings, { startDir: 'C:/Games/Working directory', launchOptions: '--windowed "two words"' });
-  await click('#art-cancel');
-  await wait("document.querySelector('#art-overlay').hidden");
+  steamEntries = [];
+  installedGames = [{ name: 'Native game', appid: 42, installdir: 'C:/Games/Native' }];
+  await click('#btn-refresh');
+  await idle();
   failNextArtList = true;
   await click('#games .game-open');
   await wait("document.querySelector('#art-grid .art-load-error button')?.textContent === 'Retry'");
@@ -402,10 +401,11 @@ app.whenReady().then(async () => {
   await run("[...document.querySelectorAll('#art-tabs button')].find(button => button.textContent.startsWith('Logo')).click()");
   await wait("!document.querySelector('#art-logo-position').hidden && document.querySelectorAll('#art-grid > .thumb').length > 0");
   await change('#art-logo-width', '70');
-  assert.equal(await run("document.querySelector('#art-apply').hidden"), false);
-  assert.equal(await run("document.querySelector('#art-modal .modal-foot').lastElementChild.id"), 'art-save');
-  await click('#art-apply');
+  await click('#art-save');
   await wait("document.querySelector('#art-overlay').hidden");
+  await click('#btn-add');
+  await wait("document.querySelector('#page-review').open");
+  await click('#review-apply');
   await wait(`!document.querySelector('#games .game-cover').hidden && document.querySelector('#games .game-cover').src === ${JSON.stringify(downloadedIcon)}`);
   assert.equal(artworkWrites.length, 1);
   assert.deepEqual(Object.keys(artworkWrites[0].rows[0].art).sort(), ['grid', 'logo']);

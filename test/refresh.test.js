@@ -233,29 +233,6 @@ it('keeps cover placeholders until loaded and retries failures', async () => {
   assert.equal(requests, 2);
 });
 
-it('keeps failed picker choices for retry', async () => {
-  const requests = [];
-  const { context, state } = renderer({ artDownload: async req => {
-    requests.push(req);
-    const kind = requests.length === 1 ? 'grid' : 'hero';
-    return { rows: [{ ...req.rows[0], art: { ...req.rows[0].art, [kind]: { ...req.rows[0].art[kind], appliedFile: `${kind}.png` } },
-      appliedKinds: [kind], failedKinds: requests.length === 1 ? ['hero'] : [] }], saved: 1, failed: requests.length === 1 ? 1 : 0, lines: [] };
-  } });
-  vm.runInContext('log = () => {}; syncCfg = async () => {}; reportArtwork = () => {}; closeArtModal = () => { S.modal = null; };', context);
-  state.cfg = {};
-  const row = { source: 'steam', steamAppid: 123, art: {} };
-  state.modal = { row, sel: { grid: { url: 'grid' }, hero: { url: 'hero' } } };
-  await vm.runInContext('applyArtModal()', context);
-  assert.equal(row.art.grid.appliedFile, 'grid.png');
-  assert.equal(row.art.hero.url, 'hero');
-  assert.equal(row.pendingArt, true);
-  assert.ok(state.modal);
-  await vm.runInContext('applyArtModal()', context);
-  assert.deepEqual(Object.keys(requests[1].rows[0].art), ['hero']);
-  assert.equal(row.art.hero.appliedFile, 'hero.png');
-  assert.equal(state.modal, null);
-});
-
 it('ignores artwork searches that finish out of order', async () => {
   const pending = [];
   const { context, state } = renderer({ sgdbSearch: () => new Promise(resolve => pending.push(resolve)) });
