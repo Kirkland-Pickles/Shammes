@@ -120,9 +120,8 @@ function flyToastToLog(t) {
   t.classList.remove('show');
 }
 
-function toast(msg, logEntry, subtle = false) {
+function toast(msg, logEntry) {
   const t = $('#toast');
-  t.classList.toggle('subtle', subtle);
   const dialog = $$('dialog[open]').at(-1);
   const host = dialog || document.body;
   if (t.parentElement !== host) host.appendChild(t);
@@ -772,8 +771,6 @@ function renderBanner() {
 function renderSteamGameSettings(row) {
   const editable = row.source !== 'steam';
   $('#steam-game-settings .launcher-editor').hidden = !editable;
-  $('#d-primary-action').hidden = !canWriteShortcut(row);
-  $('#d-primary-action').textContent = row.inSteam ? 'Apply shortcut to Steam' : 'Add to Steam';
   $('#btn-remove').hidden = !canRemoveSteamShortcut(row);
   $('#d-name').value = row.display;
   const pick = $('#d-exe-pick');
@@ -852,6 +849,7 @@ function restoreSteamDraft(row) {
   // Account changes clear the previous account's in-memory choices.
   if (row.artDraftScope !== undefined && row.artDraftScope !== scope) {
     row.art = {}; row.pendingArt = false; row.artApplied = false;
+    delete row.logoPosition;
   }
   row.artDraftScope = scope;
   const drafts = steamDraftKeys(row).map(key => S.cfg.steam_art_drafts?.[scope]?.[key])
@@ -861,6 +859,10 @@ function restoreSteamDraft(row) {
     row.pendingArt = Object.keys(row.art).length > 0;
     row.sgdbId = drafts[0].sgdbId ?? row.sgdbId;
     row.sgdbName = drafts[0].sgdbName || row.sgdbName;
+  }
+  if (drafts[0]?.logoPosition !== undefined) {
+    row.logoPosition = drafts[0].logoPosition;
+    row.pendingArt = true;
   }
   return row;
 }
@@ -873,8 +875,9 @@ async function saveSteamDrafts(rows, removedKeys = []) {
     const art = Object.fromEntries(Object.entries(row.art || {}).filter(([, image]) =>
       image && !image.current && !image.automatic && !image.appliedFile));
     for (const key of steamDraftKeys(row)) updates[key] = null;
-    updates[steamDraftKey(row)] = row.pendingArt && Object.keys(art).length
-      ? { art, sgdbId: row.sgdbId, sgdbName: row.sgdbName } : null;
+    updates[steamDraftKey(row)] = row.pendingArt && (Object.keys(art).length || row.logoPosition !== undefined)
+      ? { art, sgdbId: row.sgdbId, sgdbName: row.sgdbName,
+        ...(row.logoPosition !== undefined ? { logoPosition: row.logoPosition } : {}) } : null;
   }
   await window.api.steamDraftsSave({ scope, updates });
   await syncCfg();
@@ -989,6 +992,7 @@ async function syncSteamLibrary(entries, installed) {
       owner.art = row.art;
       owner.pendingArt = row.pendingArt;
       owner.artApplied = row.artApplied;
+      if (row.logoPosition !== undefined && owner.logoPosition === undefined) owner.logoPosition = row.logoPosition;
       owner.sgdbId = row.sgdbId;
       owner.sgdbName = row.sgdbName;
     }
@@ -1210,10 +1214,10 @@ async function doClear() {
     delete patch.steam_launch[folderKey(row.folder)];
     if (row.source === 'steam') {
       for (const key of ['sgdb_map', 'sgdb_cache']) delete patch[key][folderKey(row.folder)];
-      resets.push([row, { art: {}, sgdbId: null, sgdbName: '', pendingArt: false, pendingDetails: false, artApplied: false }, null]);
+      resets.push([row, { art: {}, sgdbId: null, sgdbName: '', pendingArt: false, pendingDetails: false, artApplied: false, logoPosition: undefined }, null]);
       continue;
     }
-    const reset = { ...row.defaults, art: {}, sgdbId: null, sgdbName: '', pendingArt: false, pendingDetails: false, artApplied: false };
+    const reset = { ...row.defaults, art: {}, sgdbId: null, sgdbName: '', pendingArt: false, pendingDetails: false, artApplied: false, logoPosition: undefined };
     const entry = (row.appid != null && byAppid.get(Number(row.appid)))
       || (row.exe && byExe.get(folderKey(row.exe))) || (reset.exe && byExe.get(folderKey(reset.exe)));
     if (entry) {
@@ -1258,6 +1262,7 @@ function rowPayload(r) {
     folder: r.folder, display: r.display, exe: r.exe, startDir: r.startDir,
     launchOptions: r.launchOptions, sgdbId: r.sgdbId, art: r.art,
     source: r.source, shortcutIdx: r.shortcutIdx, appid: r.appid, steamAppid: r.steamAppid,
+    ...(r.logoPosition !== undefined ? { logoPosition: r.logoPosition } : {}),
     launchSettings: S.cfg.steam_launch?.[folderKey(r.folder)],
   };
 }
@@ -1273,7 +1278,8 @@ async function writeArtwork(rows, kinds) {
     if (u) {
       r.art = { ...r.art, ...u.art };
       for (const kind of u.appliedKinds || []) if (!u.art[kind]) delete r.art[kind];
-      r.pendingArt = !!u.failedKinds?.length;
+      if (u.logoPositionApplied) delete r.logoPosition;
+      r.pendingArt = !!u.failedKinds?.length || r.logoPosition !== undefined;
       r.artApplied ||= !!u.appliedKinds?.length;
     }
   }
@@ -1295,43 +1301,33 @@ function reportArtwork({ saved, failed, warning }, success) {
 function canWriteShortcut(row) {
   return !!row.exe && (row.source === 'folder' || (row.source === 'shortcut' && row.managed));
 }
-async function doAddToSteam(targetRows, options = {}) {
+async function doAddToSteam(targetRows) {
   if (S.applyingSteam || S.loadingLibrary) return;
   S.applyingSteam = true;
   updateLibraryActions();
   try {
     if (!await steamPresentOrToast()) return;
-    await applyToSteam(targetRows, options);
+    await applyToSteam(targetRows);
   } finally { S.applyingSteam = false; updateLibraryActions(); }
 }
-async function applyToSteam(targetRows, options = {}) {
+async function applyToSteam(targetRows) {
   const selected = targetRows;
-  const editing = steamEditorRow();
-  if (!options.reviewed && selected.includes(editing) && canWriteShortcut(editing) && steamLauncherChanged(editing)) {
-    if (!await saveSteamLauncher()) return;
-  }
   const native = selected.filter((r) => r.source === 'steam');
   const nativeArt = native.map((r) => ({ ...r, art: Object.fromEntries(
     Object.entries(r.art || {}).filter(([, art]) => !art.automatic && !art.current)
-  ) })).filter((r) => Object.keys(r.art).length);
+  ) })).filter((r) => Object.keys(r.art).length || r.logoPosition !== undefined);
   const eligible = selected.filter(canWriteShortcut);
   const noExe = selected.filter((r) => !r.exe && r.source !== 'steam');
   if (noExe.length) log(`Skipping ${noExe.length} without exe: ${noExe.slice(0, 5).map((r) => r.display).join(', ')}`);
   if (!eligible.length) {
     if (native.length) {
       if (!nativeArt.length) { toast('Choose artwork first.'); return; }
-      if (!options.reviewed && !await confirmDlg('Apply artwork to Steam', `Apply chosen artwork to ${nativeArt.length} Steam game${nativeArt.length === 1 ? '' : 's'}? Steam will close and reopen if it is running.`)) return;
       status(`Applying artwork to ${nativeArt.length} Steam games…`);
       reportArtwork(await writeArtwork(nativeArt, []), 'Artwork applied to Steam.');
       return;
     }
     toast('No selected games with a .exe.'); return;
   }
-  const updates = eligible.filter((row) => row.inSteam && row.managed).length;
-  let summary = updates ? `Add ${eligible.length - updates} game(s) and update ${updates} existing Steam shortcut(s)?`
-    : `Add ${eligible.length} game(s) to Steam as non-Steam shortcuts?`;
-  if (nativeArt.length) summary += '\n\nChosen artwork will also be applied to the selected native Steam games.';
-  if (!options.reviewed && !await confirmDlg('Add to Steam', `${summary}\n\nSteam will close and reopen if it is running.`)) return;
   status(`Adding ${eligible.length} games to Steam…`);
   log(`Adding ${eligible.length} games…`);
   let writeCompleted = false;
@@ -1354,7 +1350,8 @@ async function applyToSteam(targetRows, options = {}) {
           r.folder = `shortcut://${u.appid}`;
         }
         r.inSteam = true;
-        r.pendingArt = !!u.failedKinds?.length;
+        if (u.logoPositionApplied) delete r.logoPosition;
+        r.pendingArt = !!u.failedKinds?.length || r.logoPosition !== undefined;
         r.pendingDetails = false;
         r.artApplied = !!Object.keys(u.art || {}).length || r.artApplied;
         if (u.art) r.art = u.art;
@@ -1365,7 +1362,10 @@ async function applyToSteam(targetRows, options = {}) {
     lines.forEach(line => log(line));
     for (const row of nativeRows) {
       const original = S.rows.find(r => r.folder === row.folder);
-      if (original) { original.art = row.art; original.pendingArt = !!row.failedKinds?.length; original.artApplied ||= !!row.appliedKinds?.length; }
+      if (original) { original.art = row.art;
+        if (row.logoPositionApplied) delete original.logoPosition;
+        original.pendingArt = !!row.failedKinds?.length || original.logoPosition !== undefined;
+        original.artApplied ||= !!row.appliedKinds?.length; }
     }
     await saveSteamDrafts([...eligible, ...native], draftKeys);
     renderRows();
@@ -1918,6 +1918,7 @@ async function openArtModal(row, focusKind) {
     current: {},
     stock: {},
     sel: { ...(row.art || {}) },
+    initialLogoPosition: row.logoPosition,
     games: [],
   };
   $('#art-filters').open = false;
@@ -1934,8 +1935,6 @@ async function openArtModal(row, focusKind) {
   $('.art-id-advanced').hidden = keyless;
   $('#art-q').placeholder = keyless ? 'Search Steam' : 'Search SteamGridDB';
   $('#art-q').setAttribute('aria-label', keyless ? 'Search Steam' : 'Search SteamGridDB');
-  const writesSteam = row.source !== 'desktop' && (row.source === 'steam' || row.inSteam);
-  $('#art-apply').hidden = !writesSteam;
   $('#art-key-notice').hidden = !keyless;
   if (keyless) $('#art-key-notice-text').textContent = 'Search Steam for official artwork, or choose your own images.';
   $('#art-url').hidden = row.source === 'desktop';
@@ -1955,7 +1954,7 @@ async function openArtModal(row, focusKind) {
   if (row.source !== 'desktop') {
     const m = S.modal;
     window.api.artLogoPosition(rowPayload(row)).then(position => {
-      if (S.modal !== m || m.logoPosition !== undefined) return;
+      if (S.modal !== m || m.logoPosition !== undefined || row.logoPosition !== undefined) return;
       m.initialLogoPosition = position;
       renderLogoPosition();
     }).catch(e => log(`Logo position: ${e.message}`));
@@ -1996,7 +1995,8 @@ async function closeArtModal(save, remind = false) {
     try {
       if (m.row.source !== 'steam' && steamLauncherChanged(m.row) && !await saveSteamLauncher()) return;
       await saveSteamDrafts([{ ...m.row, art: m.sel,
-        pendingArt: m.row.pendingArt || JSON.stringify(m.row.art || {}) !== JSON.stringify(m.sel || {}),
+        logoPosition: m.logoPosition !== undefined ? m.logoPosition : m.row.logoPosition,
+        pendingArt: m.row.pendingArt || m.logoPosition !== undefined || JSON.stringify(m.row.art || {}) !== JSON.stringify(m.sel || {}),
         sgdbId: m.sgdbId, sgdbName: m.games.find(game => game.id === m.sgdbId)?.name || m.row.sgdbName }]);
     } catch (error) {
       artStatus(`Choices could not be saved: ${error.message || error}`);
@@ -2023,7 +2023,7 @@ async function closeArtModal(save, remind = false) {
   if (save) {
     if (m.row.source === 'desktop') {
       renderDesktop();
-      if (remind && reviewCandidates('desktop').length) toast('Ready to review', null, true);
+      if (remind && reviewCandidates('desktop').length) toast('Ready to review');
       restoreArtFocus(m);
       return;
     }
@@ -2035,72 +2035,14 @@ async function closeArtModal(save, remind = false) {
     }
     const artworkChanged = JSON.stringify(m.row.art || {}) !== JSON.stringify(m.sel || {});
     m.row.art = { ...m.sel };
+    if (m.logoPosition !== undefined) { m.row.logoPosition = m.logoPosition; m.row.pendingArt = true; }
     if (artworkChanged) m.row.pendingArt = true;
     S.cardArtCache.delete(coverToken(m.row));
     renderRows();
-    if (remind && reviewCandidates('library').length) toast('Ready to review', null, true);
+    if (remind && reviewCandidates('library').length) toast('Ready to review');
     log(`'${m.row.display}': artwork selection updated.`);
   }
   restoreArtFocus(m);
-}
-
-async function applyArtModal() {
-  const m = S.modal;
-  if (!m || m.applying) return;
-  if (m.row.source === 'desktop' || !m.row.inSteam && m.row.source !== 'steam') return;
-  const changed = Object.fromEntries(Object.entries(m.sel).filter(([kind, image]) =>
-    JSON.stringify(image) !== JSON.stringify(m.row.art?.[kind])));
-  if (!Object.keys(changed).length && m.logoPosition === undefined && !m.row.pendingArt) {
-    await closeArtModal(true);
-    return;
-  }
-  const art = m.row.pendingArt
-    ? Object.fromEntries(Object.entries(m.sel).filter(([, image]) => !image.automatic && !image.current && !image.appliedFile))
-    : changed;
-  m.applying = true;
-  $('#art-apply').disabled = true;
-  $('#art-modal').inert = true;
-  try {
-    const payload = { ...rowPayload(m.row), sgdbId: m.sgdbId, art,
-      ...(m.logoPosition !== undefined ? { logoPosition: m.logoPosition } : {}) };
-    const result = await window.api.artDownload({ rows: [payload], kinds: [], onlyMissing: false });
-    result.lines.forEach(line => log(line, 'library'));
-    const applied = result.rows[0]?.art || {};
-    m.row.art ||= {};
-    for (const kind of result.rows[0]?.appliedKinds || []) {
-      if (applied[kind]) m.row.art[kind] = applied[kind];
-      else delete m.row.art[kind];
-    }
-    m.row.artApplied ||= result.saved > 0;
-    const failedKinds = result.rows[0]?.failedKinds || [];
-    if (failedKinds.length) {
-      for (const kind of failedKinds) if (m.sel[kind]) m.row.art[kind] = m.sel[kind];
-    }
-    m.row.pendingArt = failedKinds.length > 0;
-    await saveSteamDrafts([{ ...m.row, sgdbId: m.sgdbId,
-      sgdbName: m.games?.find(game => game.id === m.sgdbId)?.name || m.row.sgdbName }]);
-    S.cardArtCache.clear();
-    S.previewCache = {};
-    if (result.rows[0]?.logoPositionApplied) { m.initialLogoPosition = m.logoPosition; delete m.logoPosition; }
-    if (result.failed) {
-      for (const kind of result.rows[0]?.appliedKinds || []) {
-        if (m.row.art[kind]) m.sel[kind] = m.row.art[kind];
-        else delete m.sel[kind];
-      }
-      artStatus('Some artwork could not be applied. Check the log and try again.');
-      return;
-    }
-    m.sel = { ...m.row.art };
-    m.row.pendingArt = false;
-    await syncCfg();
-    m.applying = false;
-    await closeArtModal(true);
-    reportArtwork(result, 'Artwork applied to Steam.');
-  } finally {
-    m.applying = false;
-    $('#art-apply').disabled = false;
-    $('#art-modal').inert = false;
-  }
 }
 
 function renderLogoPosition() {
@@ -2520,12 +2462,6 @@ function wireToolbar() {
   });
   $('#btn-refresh').addEventListener('click', handleAction('Refresh', doRefresh));
   $('#btn-add').addEventListener('click', () => openReview('library'));
-  $('#d-primary-action').addEventListener('click', handleAction('Add to Steam', async () => {
-    const row = steamEditorRow();
-    if (!row) return;
-    await doAddToSteam([row]);
-    if (steamEditorRow() === row) renderSteamGameSettings(row);
-  }));
   $('#btn-remove').addEventListener('click', handleAction('Shortcut removal', doRemoveFromSteam));
   $('#btn-prune').addEventListener('click', handleAction('Prune', doPruneMissing));
   $('#btn-clear').addEventListener('click', handleAction('Clear', doClear));
@@ -2665,7 +2601,6 @@ function wireToolbar() {
     $('#preferences').open = true;
     $('[data-r="key"]')?.focus();
   });
-  $('#art-apply').addEventListener('click', handleAction('Apply artwork', applyArtModal));
   $$('[data-logo-anchor]').forEach(button => {
     button.onclick = () => {
       const input = $('#art-logo-anchor');
@@ -2906,6 +2841,7 @@ function renderReview() {
     const action = desktop ? (desktopMembers(row).every(member => member.shortcut) ? 'Update shortcut' : 'Create missing shortcuts')
       : row.source === 'steam' ? 'Update artwork' : row.inSteam ? 'Update Steam shortcut' : 'Add to Steam';
     const art = Object.keys(row.art || {}).filter(kind => !row.art[kind].current);
+    if (row.logoPosition !== undefined) art.push('logo position');
     label.innerHTML = `<input type="checkbox" ${review.included.has(row) ? 'checked' : ''}><img class="review-cover" alt="" hidden><strong>${esc(row.display)}</strong><span>${action}${art.length ? ' · ' + art.map(kind => ({ grid: 'cover', wide: 'wide cover', hero: 'background', logo: 'logo', icon: 'icon' }[kind] || kind)).join(', ') : ''}</span>`;
     label.querySelector('input').onchange = event => {
       if (event.target.checked) review.included.add(row); else review.included.delete(row);
@@ -2950,7 +2886,7 @@ function wireReview() {
     $('#page-review').inert = $('#page-nav').inert = true;
     try {
       if (review.destination === 'desktop') await applyDesktopShortcuts([...review.included], { reviewed: true });
-      else await doAddToSteam([...review.included], { reviewed: true });
+      else await doAddToSteam([...review.included]);
       closeReview(false);
     } finally { $('#page-review').inert = $('#page-nav').inert = false; }
   });

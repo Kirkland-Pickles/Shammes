@@ -664,6 +664,28 @@ async function fetchOneArt(c, gridFolder, stem, row, kind, changes = null, short
   const suffix = steam.ART_SUFFIXES[kind];
   const sel = row.art?.[kind]?.automatic ? null : row.art?.[kind] || null;
   if (!sel || sel.current) return { line: '', saved: false };
+  if (sel.reset) {
+    if (kind === 'icon' && native) {
+      const original = changes.files.filter(f => f.before && path.dirname(f.path) === path.join(cfg.steam_path, 'appcache', 'librarycache', stem));
+      const icon = original.find(f => /^[a-f0-9]{40}\.jpg$/i.test(path.basename(f.path)));
+      if (!icon) throw new Error('Choose Stock Steam artwork to restore this icon.');
+      const finish = beforeWrite(icon.path, false);
+      try { fs.copyFileSync(icon.before, icon.path); } finally { finish(); }
+    } else {
+      for (const ext of [...steam.GRID_IMAGE_EXTS, ...(kind === 'icon' ? ['.ico'] : [])]) {
+        const file = path.join(gridFolder, `${stem}${steam.ART_SUFFIXES[kind]}${ext}`);
+        if (!fs.existsSync(file)) continue;
+        const finish = beforeWrite(file, false);
+        try { fs.unlinkSync(file); } finally { finish(); }
+      }
+      if (kind === 'icon' && shortcut?.icon) {
+        changes.fields.push({ appid: shortcut.appid, field: 'icon', before: shortcut.icon });
+        shortcut.icon = '';
+      }
+    }
+    delete row.art[kind];
+    return { line: `${row.display} [${kind}]: restored default artwork.`, saved: true };
+  }
   let metadata;
   if (native && kind === 'icon') {
     metadata = await native.metadata().catch(() => ({}));
@@ -800,6 +822,23 @@ function artworkBackup(changes) {
     };
   };
 }
+function saveLogoPosition(gridFolder, stem, row, beforeWrite) {
+  const position = row.logoPosition;
+  if (position && (!['BottomLeft', 'UpperLeft', 'CenterCenter', 'UpperCenter', 'BottomCenter'].includes(position.pinnedPosition)
+    || ![position.nWidthPct, position.nHeightPct].every(n => Number.isFinite(n) && n >= 1 && n <= 100))) {
+    throw new Error('Choose a valid logo position and size.');
+  }
+  const file = path.join(gridFolder, `${stem}.json`);
+  let data = {};
+  try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  const finish = beforeWrite(file, false);
+  try {
+    if (position) data.logoPosition = position;
+    else delete data.logoPosition;
+    store.writeFileAtomic(file, JSON.stringify({ nVersion: 1, ...data }));
+  } finally { finish(); }
+  row.logoPositionApplied = true;
+}
 async function downloadArtwork(req) {
   if (!cfg.steam_path || !cfg.steam_user_id) throw new Error('Connect Steam and choose an account in Add games.');
   const rows = (req && Array.isArray(req.rows) ? req.rows : []);
@@ -847,32 +886,6 @@ async function downloadArtwork(req) {
     for (const kind of rowKinds) {
       if (!row.sgdbId && !row.art?.[kind]) continue;
       try {
-        if (row.art?.[kind]?.reset) {
-          if (kind === 'icon' && isNative) {
-            const original = changes.files.filter(f => f.before && path.dirname(f.path) === path.join(cfg.steam_path, 'appcache', 'librarycache', stem));
-            const icon = original.find(f => /^[a-f0-9]{40}\.jpg$/i.test(path.basename(f.path)));
-            if (!icon) throw new Error('Choose Stock Steam artwork to restore this icon.');
-            const finish = beforeWrite(icon.path, false);
-            try { fs.copyFileSync(icon.before, icon.path); } finally { finish(); }
-          } else {
-            for (const ext of [...steam.GRID_IMAGE_EXTS, ...(kind === 'icon' ? ['.ico'] : [])]) {
-              const file = path.join(gridFolder, `${stem}${steam.ART_SUFFIXES[kind]}${ext}`);
-              if (!fs.existsSync(file)) continue;
-              const finish = beforeWrite(file, false);
-              try { fs.unlinkSync(file); } finally { finish(); }
-            }
-            if (kind === 'icon' && hit?.icon) {
-              changes.fields.push({ appid: hit.appid, field: 'icon', before: hit.icon });
-              hit.icon = '';
-              shortcutsChanged = true;
-            }
-          }
-          delete row.art[kind];
-          row.appliedKinds.push(kind);
-          saved++;
-          lines.push(`${row.display} [${kind}]: restored default artwork.`);
-          continue;
-        }
         const beforeIcon = hit && hit.icon;
         const result = await fetchOneArt(c, gridFolder, stem, row, kind, changes, hit, native, beforeWrite);
         lines.push(result.line);
@@ -886,22 +899,8 @@ async function downloadArtwork(req) {
     }
     if (row.logoPosition !== undefined) {
       try {
-        const position = row.logoPosition;
-        if (position && (!['BottomLeft', 'UpperLeft', 'CenterCenter', 'UpperCenter', 'BottomCenter'].includes(position.pinnedPosition)
-          || ![position.nWidthPct, position.nHeightPct].every(n => Number.isFinite(n) && n >= 1 && n <= 100))) {
-          throw new Error('Choose a valid logo position and size.');
-        }
-        const file = path.join(gridFolder, `${stem}.json`);
-        let data = {};
-        try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-        const finish = beforeWrite(file, false);
-        try {
-          if (position) data.logoPosition = position;
-          else delete data.logoPosition;
-          store.writeFileAtomic(file, JSON.stringify({ nVersion: 1, ...data }));
-        } finally { finish(); }
+        saveLogoPosition(gridFolder, stem, row, beforeWrite);
         saved++;
-        row.logoPositionApplied = true;
         lines.push(`${row.display}: logo position saved.`);
       } catch (e) { failed++; lines.push(`${row.display}: ${e.message}`); }
     }
@@ -1054,6 +1053,13 @@ async function addSteam(req) {
           lines.push(`  ${row.display} [${kind}]: ${String((err && err.message) || err)}`);
         }
       }
+    }
+    if (row.logoPosition !== undefined) {
+      try {
+        saveLogoPosition(gridFolder, steam.gridStemFromEntry(shortcut), row, beforeWrite);
+        artworkSaved++;
+        lines.push(`${row.display}: logo position saved.`);
+      } catch (error) { artworkFailed++; lines.push(`${row.display}: ${error.message}`); }
     }
   }
   let bak = null;
