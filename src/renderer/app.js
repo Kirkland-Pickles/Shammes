@@ -2621,7 +2621,17 @@ function wireToolbar() {
     artOverlayPressed = false;
   });
   document.addEventListener('keydown', (e) => {
+    if (e.defaultPrevented) return;
     if (S.exePicker) return;
+    if (e.key === 'Escape') {
+      const menu = $$('#preferences[open], #art-filters[open], #art-matches[open]').at(-1);
+      if (menu) {
+        e.preventDefault();
+        menu.open = false;
+        $('summary', menu).focus({ preventScroll: true });
+        return;
+      }
+    }
     if (S.modal && e.key === 'Tab') {
       const focusable = $$('#art-modal button:not(:disabled), #art-modal input:not(:disabled), #art-modal select:not(:disabled), #art-modal summary')
         .filter((element) => !element.closest('[hidden]') && element.getClientRects().length);
@@ -2630,10 +2640,7 @@ function wireToolbar() {
       else if (!e.shiftKey && at === focusable.length - 1) { e.preventDefault(); focusable[0]?.focus(); }
     }
     if (e.key === 'Escape' && S.modal) {
-      if ($('#art-matches').open) {
-        dismissMatches();
-      } else if ($('#art-filters').open) $('#art-filters').open = false;
-      else if (!$('#art-url-entry').hidden) $('#art-url-entry').hidden = true;
+      if (!$('#art-url-entry').hidden) $('#art-url-entry').hidden = true;
       else closeArtModal(false);
     }
     if (e.altKey && e.key === 'ArrowLeft') moveReview('back');
