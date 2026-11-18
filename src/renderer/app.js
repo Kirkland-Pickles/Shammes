@@ -21,7 +21,7 @@ const S = {
   rows: [],
   steamUsers: [],
   filter: '',
-  sourceFilter: 'all',
+  nonSteamOnly: false,
   hideOwned: false,
   ownedAppids: new Set(), // Steam appids installed for the user (hide-owned filter)
   previewCache: {},         // sgdbId -> saved cover source
@@ -563,7 +563,7 @@ const needsReview = (row) => row.source !== 'steam' && !row.sgdbId && row.idMeth
 function visibleSteamRows() {
   const f = S.filter.trim().toLocaleLowerCase();
   return S.rows.filter((r) => {
-    if (S.sourceFilter !== 'all' && r.source !== S.sourceFilter) return false;
+    if (S.nonSteamOnly && r.source === 'steam') return false;
     if (f && !`${r.display} ${r.folder} ${r.exe || ''}`.toLocaleLowerCase().includes(f)) return false;
     // Hide-owned only trusts certain appids. Shortcut rows carry guesses,
     // so they never hide.
@@ -702,6 +702,24 @@ function updateLibraryActions() {
   $('#btn-refresh').disabled = busy;
 }
 
+function renderEmptyLibrary(body, message, action, run) {
+  const row = body.insertRow();
+  row.className = 'empty-row';
+  const content = document.createElement('div');
+  content.className = 'list-empty';
+  const copy = document.createElement('p');
+  copy.textContent = message;
+  content.append(copy);
+  if (action) {
+    const button = document.createElement('button');
+    button.className = 'btn sm';
+    button.textContent = action;
+    button.addEventListener('click', (e) => { e.stopPropagation(); run(); });
+    content.append(button);
+  }
+  row.insertCell().append(content);
+}
+
 function renderRows() {
   const body = $('#games-body');
   body.innerHTML = '';
@@ -716,13 +734,15 @@ function renderRows() {
       }
     }, { root: observerRoot, rootMargin: '420px 0px' }) : null;
   if (!visible.length) {
-    const tr = document.createElement('tr');
-    tr.className = 'empty-row';
-    const message = S.loadingLibrary ? 'Loading games…' : S.rows.length ? 'No games match these filters.' : '';
-    if (message) {
-      tr.innerHTML = `<td><div class="list-empty">${message}</div></td>`;
-      body.appendChild(tr);
-    }
+    if (S.loadingLibrary) renderEmptyLibrary(body, 'Loading games…');
+    else if (S.rows.length) renderEmptyLibrary(body, 'No games match these filters.', 'Clear filters', () => {
+      $('#filter').value = S.filter = '';
+      $('#source-filter').checked = S.nonSteamOnly = false;
+      $('#hide-owned').checked = S.hideOwned = false;
+      renderRows();
+      $('#filter').focus();
+    });
+    else if (S.steamFound && S.cfg.steam_user_id) renderEmptyLibrary(body, 'No games found.', 'Add games folder', openFolders);
   }
   for (const row of visible) {
     const key = rowKey(row);
@@ -750,7 +770,6 @@ function renderRows() {
   $('#library-count').textContent = `${S.rows.length} game${S.rows.length === 1 ? '' : 's'}`;
   $('#library-grid-count').textContent = visible.length === S.rows.length ? '' : `${visible.length} game${visible.length === 1 ? '' : 's'} shown`;
   updateLibraryActions();
-  renderBanner();
 }
 
 function rowKey(r) {
@@ -759,13 +778,6 @@ function rowKey(r) {
 
 function rowByKey(key) {
   return S.rows.find((r) => rowKey(r) === key);
-}
-
-function renderBanner() {
-  const banner = $('#lib-banner');
-  if (!banner) return;
-  banner.hidden = !!(S.loadingLibrary || S.rows.length) || !$('#library-setup')?.hidden;
-  banner.textContent = banner.hidden ? '' : 'No games found. Add a game folder or refresh after installing a game.';
 }
 
 function renderSteamGameSettings(row) {
@@ -1625,10 +1637,14 @@ function renderDesktop() {
       }
     }, { root, rootMargin: '420px 0px' }) : null;
   if (!visible.length) {
-    const tr = document.createElement('tr');
-    tr.className = 'empty-row';
-    tr.innerHTML = `<td><div class="list-empty">${d.busy ? 'Loading Desktop games…' : S.desktop.rows.length ? 'No games match these filters.' : 'Add a game folder to get started.'}</div></td>`;
-    body.appendChild(tr);
+    if (d.busy) renderEmptyLibrary(body, 'Loading Windows games…');
+    else if (cards.length) renderEmptyLibrary(body, 'No games match these filters.', 'Clear filters', () => {
+      $('#desktop-filter').value = '';
+      $('#desktop-hide').checked = false;
+      renderDesktop();
+      $('#desktop-filter').focus();
+    });
+    else renderEmptyLibrary(body, 'No games found for Windows shortcuts.', 'Add games folder', openFolders);
   }
   for (const row of visible) {
     const members = desktopMembers(row);
@@ -2478,11 +2494,10 @@ function wireToolbar() {
     renderRows();
   });
   $('#filter').addEventListener('input', (e) => { S.filter = e.target.value; renderRows(); });
-  $('#source-filter').addEventListener('change', (e) => { S.sourceFilter = e.target.value; renderRows(); });
-  // lib-banner buttons are rebuilt by renderBanner() with their own handlers.
+  $('#source-filter').addEventListener('change', (e) => { S.nonSteamOnly = e.target.checked; renderRows(); });
   $('#games-body').addEventListener('click', (e) => {
     const tr = e.target.closest('tr');
-    if (!tr) return;
+    if (!tr?.dataset.key) return;
 
     const row = rowByKey(tr.dataset.key);
     if (row) openArtModal(row, e.target.closest('.game-open') ? 'grid' : 'manage');

@@ -68,14 +68,8 @@
 
       <div class="desktop-apply-group"><button class="btn sm" id="btn-refresh"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Refresh</button><button class="btn primary library-apply" id="btn-add">Review changes</button></div>
     </header>
-    <div id="lib-banner" class="banner" hidden></div>
-
-    <div class="browse-line"><div class="browse-tools"><div class="browse-filters"><label class="tool-select">
-        <select id="source-filter" aria-label="Filter games by source" title="Filter games by source">
-          <option value="all">All games</option><option value="steam">Steam games</option>
-          <option value="shortcut">Shortcuts</option><option value="folder">Scanned games</option>
-        </select>
-      </label>
+    <div class="browse-line"><div class="browse-tools"><div class="browse-filters">
+      <label class="installed-toggle"><input type="checkbox" role="switch" id="source-filter"><span class="switch-track" aria-hidden="true"></span><span class="switch-label">Non-Steam only</span></label>
       <label class="installed-toggle"><input type="checkbox" role="switch" id="hide-owned"><span class="switch-track" aria-hidden="true"></span><span class="switch-label">Hide installed</span></label>
 </div><label class="search-wrap"><span class="sr-only">Search games</span><input class="search-field" id="filter" type="search" placeholder="Search games" autocomplete="off"></label></div></div>
     <div class="library-workspace">
@@ -100,7 +94,7 @@
       </div>
     </header>
 
-    <div class="browse-line"><div class="browse-tools"><div class="browse-filters"><label class="check"><input type="checkbox" id="desktop-hide"> Hide existing shortcuts</label></div><label class="search-wrap"><span class="sr-only">Search Desktop games</span><input type="search" id="desktop-filter" class="search-field" placeholder="Search games" autocomplete="off"></label></div></div>
+    <div class="browse-line"><div class="browse-tools"><div class="browse-filters"><label class="installed-toggle"><input type="checkbox" role="switch" id="desktop-hide"><span class="switch-track" aria-hidden="true"></span><span class="switch-label">Hide existing shortcuts</span></label></div><label class="search-wrap"><span class="sr-only">Search Desktop games</span><input type="search" id="desktop-filter" class="search-field" placeholder="Search games" autocomplete="off"></label></div></div>
     <div class="library-workspace">
       <section class="list-panel" aria-label="Desktop games">
         <div class="list-wrap">
