@@ -1874,9 +1874,11 @@ function renderArtFilters() {
   const labels = { static: 'Static', animated: 'Animated', untagged: 'Untagged', nsfw: 'Adult Content',
     humor: 'Humor', epilepsy: 'Epilepsy', material: 'Minimal', white_logo: 'White Logo', no_logo: 'No Logo',
     'image/png': 'PNG', 'image/jpeg': 'JPEG', 'image/webp': 'WebP', 'image/vnd.microsoft.icon': 'ICO' };
-  const groups = [['Types', null, ['static', 'animated']], ['Tags', null, ['untagged', 'nsfw', 'humor', 'epilepsy']],
-    ['Styles', 'styles', styles], ['File types', 'mimes', formats], ['Dimensions', 'dimensions', dimensions]];
+  const groups = [['Motion', null, ['static', 'animated']], ['Content', null, ['untagged', 'nsfw', 'humor', 'epilepsy']],
+    ['Style', 'styles', styles], ['Format', 'mimes', formats], ['Dimensions', 'dimensions', dimensions]];
   const host = $('#art-filter-fields');
+  const dimensionsOpen = host.dataset.kind === kind && $('.filter-size-disclosure', host)?.open;
+  host.dataset.kind = kind;
   host.innerHTML = groups.filter(([, , options]) => options.length).map(([title, field, options]) => {
     const choices = options.map(value => {
       const selected = field ? values[field]?.includes(value) ?? true : values[value];
@@ -1884,8 +1886,14 @@ function renderArtFilters() {
       return `<label class="check"><input type="checkbox" data-filter="${field || value}" value="${value}" ${selected ? 'checked' : ''}
         ${m.row.source === 'desktop' && ['static', 'animated'].includes(value) ? 'disabled' : ''}>${label}</label>`;
     }).join('');
-    if (field !== 'dimensions') return `<fieldset><legend>${title}</legend>${choices}</fieldset>`;
-    return `<fieldset class="filter-dimensions"><legend>Dimensions</legend><div class="dimension-options">${choices}</div></fieldset>`;
+    if (field === 'dimensions' && options.length > 12) {
+      const count = options.filter(value => values.dimensions?.includes(value) ?? true).length;
+      return `<fieldset class="filter-dimensions"><legend class="sr-only">${title}</legend>
+        <details class="filter-size-disclosure" ${dimensionsOpen ? 'open' : ''}><summary>${title}<span data-size-count>${count} selected</span></summary>
+        <div class="filter-options">${choices}</div></details></fieldset>`;
+    }
+    return `<fieldset ${title === 'Motion' && m.row.source === 'desktop' ? 'hidden' : ''}><legend class="sr-only">${title}</legend>
+      <div class="filter-row"><span aria-hidden="true">${title}</span><div class="filter-options">${choices}</div></div></fieldset>`;
   }).join('');
   host.onchange = event => handleAction('Artwork filters', async () => {
     const inputs = [...event.target.closest('fieldset').querySelectorAll('input')];
@@ -1893,6 +1901,8 @@ function renderArtFilters() {
       inputs.find(input => input !== event.target).checked = true;
     }
     const next = collectSavedPickerFilters(kind, host.querySelectorAll('input'));
+    const sizes = $('[data-size-count]', host);
+    if (sizes) sizes.textContent = `${next.dimensions.length} selected`;
     await savePatch({ artwork_filters: { ...S.cfg.artwork_filters, [kind]: next } });
     if (S.modal !== m || m.tab !== kind) return;
     await loadArtTabs();

@@ -212,13 +212,20 @@ button.game-open:hover:not(:disabled) { border-color: transparent; background: t
 #art-games { position: absolute; z-index: 7; top: calc(100% + 5px); left: 0; width: min(340px, 70vw); box-shadow: 0 8px 22px #0005; }
 #art-id { width: 100px; }
 #art-filters summary { padding: 8px 0; color: var(--fg); cursor: pointer; font-weight: 600; }
-#art-filter-reset { margin: 0 0 9px; }
-#art-filter-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; padding: 3px 0 9px; }
-#art-filter-fields fieldset { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 2px; border: 0; }
-#art-filter-fields legend { margin-bottom: 5px; color: var(--muted); font-size: 8pt; }
-#art-filter-fields .check { min-height: 22px; }
-#art-filter-fields .filter-dimensions { grid-column: 1 / -1; min-width: 0; }
-.dimension-options { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 4px 12px; padding: 4px 0 8px; }
+#art-filter-fields { max-height: 43vh; overflow: auto; scrollbar-width: thin; padding: 4px 12px; }
+#art-filter-fields fieldset { min-width: 0; border: 0; }
+#art-filter-fields fieldset + fieldset { border-top: 1px solid var(--line); }
+#art-filter-fields fieldset[hidden] + fieldset { border-top: 0; }
+.filter-row { display: grid; grid-template-columns: 82px minmax(0, 1fr); align-items: start; gap: 8px; padding-block: 8px; }
+.filter-row > span, .filter-size-disclosure summary { color: var(--fg); font-size: 9pt; font-weight: 600; }
+.filter-row > span { padding-block: 4px; }
+.filter-options { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.filter-options .check { min-height: 24px; color: var(--fg); }
+.filter-options input { width: 14px; height: 14px; }
+.filter-size-disclosure summary { min-height: 32px; padding: 8px 0; cursor: pointer; }
+.filter-size-disclosure summary span { float: right; color: var(--muted); font-weight: 400; }
+.filter-size-disclosure .filter-options { padding: 4px 0 8px; }
+.filter-actions { display: flex; justify-content: flex-end; padding: 3px 8px; border-top: 1px solid var(--line); }
 .tabs { display: flex; flex: 0 0 auto; flex-wrap: wrap; min-height: 39px; align-items: stretch; gap: 4px; border-bottom: 1px solid var(--line); }
 .tab { position: relative; min-height: 38px; padding: 8px 13px 10px; border: 0; border-radius: 0; color: var(--muted); background: transparent; white-space: nowrap; }
 .tab:hover { color: var(--fg); background: transparent; }
@@ -317,8 +324,7 @@ button.game-open:hover:not(:disabled) { border-color: transparent; background: t
 #art-filters { flex: 0 0 auto; position: relative; align-self: flex-start; border-bottom: 0; margin-bottom: 0; z-index: 6; }
 #art-filters > summary { padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius); list-style: none; }
 #art-filters > summary::after { content: ' ▾'; margin-left: 6px; color: var(--muted); }
-.filter-popover { position: absolute; top: calc(100% + 5px); right: 0; width: min(740px, 75vw); max-height: 52vh; overflow: auto; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); box-shadow: 0 8px 22px #0006; }
-#art-filter-reset { margin-top: 10px; }
+.filter-popover { position: absolute; top: 100%; right: 0; width: min(500px, 75vw); border: 1px solid var(--border); border-radius: 7px; background: var(--panel); box-shadow: 0 8px 22px #0006; }
 #art-grid { display: grid; grid-template-columns: repeat(auto-fit, min(100%, var(--art-tile, 172px))); justify-content: center; align-items: start; gap: 16px; }
 #art-grid .thumb { width: 100%; min-width: 0; }
 #art-grid[data-kind="wide"], #art-grid[data-kind="logo"] { --art-tile: 252px; }
