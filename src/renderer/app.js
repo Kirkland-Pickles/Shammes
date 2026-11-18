@@ -2824,9 +2824,8 @@ function renderReview() {
   $('#review-title').textContent = !review.savedCount
     ? desktop ? 'Create shortcuts' : 'Add to Steam' : 'Review changes';
   $('#review-summary').textContent = `${review.included.size} of ${review.rows.length} games selected for ${destination}`;
-  $('#review-note').textContent = desktop
-    ? 'Choose which shortcuts to create or update. Your game files are not changed.'
-    : 'Review the games below. New games become non-Steam shortcuts. Saved artwork and launcher changes are applied together. Steam closes and reopens if it is running.';
+  $('#review-note')?.remove();
+  if (desktop) $('#page-review .library-head').insertAdjacentHTML('afterend', '<p id="review-note" class="note">Choose which shortcuts to create or update. Your game files are not changed.</p>');
   $('#review-apply').textContent = `Apply to ${destination}`;
   $('#review-apply').disabled = !review.included.size;
   $('#review-status').textContent = 'Nothing has been applied yet.';
