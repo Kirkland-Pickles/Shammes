@@ -166,7 +166,7 @@ button.game-open:hover:not(:disabled) { border-color: transparent; background: t
 #bottomdock { flex: 0 0 auto; height: 138px; overflow: hidden; padding: 6px 26px 8px; background: var(--panel); border-top: 1px solid var(--border); transition: height .18s ease; }
 #bottomdock.collapsed { height: 0; padding-top: 0; padding-bottom: 0; border-top-width: 0; }
 #log { height: 96px; overflow: auto; padding: 6px 0; color: var(--fg); font: 8.5pt/1.45 var(--mono-font); }
-#log div { white-space: pre-wrap; overflow-wrap: anywhere; }
+#log div { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; cursor: text; }
 .progress { flex: 0 0 3px; margin: 0 26px; overflow: hidden; background: var(--panel-raised); }
 #fill { height: 100%; width: 0; background: var(--accent); transition: width .18s ease; }
 #statusbar { display: flex; align-items: center; gap: 12px; padding: 5px 26px; color: var(--muted); font-size: 8.5pt; }
