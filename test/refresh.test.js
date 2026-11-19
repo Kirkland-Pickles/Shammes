@@ -239,7 +239,7 @@ it('ignores artwork searches that finish out of order', async () => {
   const fields = { '#art-q': { value: 'old' }, '#art-matches': {}, '#art-games': { appendChild() {} }, '#art-id': {}, '#art-status': {} };
   context.document.querySelector = selector => fields[selector];
   context.document.createElement = () => ({});
-  vm.runInContext('loadArtTabs = async () => {};', context);
+  vm.runInContext('loadArtTabs = async () => {}; renderChoiceList = () => {};', context);
   state.cfg = { api_key: 'fixture' };
   state.modal = {};
   const older = vm.runInContext('artSearch()', context);
@@ -251,7 +251,7 @@ it('ignores artwork searches that finish out of order', async () => {
   await older;
   assert.equal(fields['#art-id'].value, '22');
   assert.equal(fields['#art-games'].value, '22');
-  assert.equal(fields['#art-matches'].open, true);
+  assert.equal(fields['#art-matches'].hidden, false);
   const lastSearch = vm.runInContext('artSearch()', context);
   fields['#art-id'].value = '88';
   await vm.runInContext('artLoadId()', context);
@@ -259,7 +259,7 @@ it('ignores artwork searches that finish out of order', async () => {
   await lastSearch;
   assert.equal(state.modal.sgdbId, 88);
   assert.equal(fields['#art-id'].value, '88');
-  assert.equal(fields['#art-matches'].open, false);
+  assert.equal(fields['#art-matches'].hidden, true);
 });
 
 it('allows updates to existing managed shortcuts', () => {
@@ -519,7 +519,8 @@ it('dedupes exact exes and keeps nearby games and saved choices', async () => {
     } } } };
   const before = JSON.stringify(state.cfg);
   state.rows = [
-    { source: 'folder', folder: 'D:/Games/One', exe: 'D:/Games/One/game.exe', art: {} },
+    { source: 'folder', folder: 'D:/Games/One', exe: 'D:/Games/One/game.exe', art: {},
+      candidates: [{ path: 'D:/Games/One/game.exe' }, { path: 'D:/Games/One/launcher.exe' }] },
     { source: 'folder', folder: 'D:/Games', exe: 'D:/Games/other.exe', art: {} },
     { source: 'folder', folder: 'D:/Games/One', exe: 'D:/Games/One/other.exe', art: {} },
   ];
@@ -531,6 +532,8 @@ it('dedupes exact exes and keeps nearby games and saved choices', async () => {
   assert.equal(owner.pendingArt, true);
   assert.equal(owner.art.grid.url, 'saved-grid');
   assert.equal(owner.sgdbId, 7);
+  assert.deepEqual(Array.from(owner.candidates, candidate => candidate.path),
+    ['d:\\GAMES\\one\\GAME.exe', 'D:/Games/One/launcher.exe']);
   assert.equal(JSON.stringify(state.cfg), before);
   // A later launch without scan roots still finds the original executable-keyed draft.
   state.rows = [];

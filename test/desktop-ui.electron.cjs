@@ -13,6 +13,7 @@ let steamEntries = [];
 let failNextArtList = false;
 const artRequests = [];
 const artworkWrites = [];
+let wallpaperImage;
 const rows = [1, 2].map((i) => ({ id: `link:${i}`, shortcut: `C:\\Desktop\\Variant ${i}.lnk`, signature: 'original',
   display: `Variant ${i}`, exe: `C:\\Games\\Game${i}.exe`, args: `-profile ${i}`, admin: false, icon: 'C:\\Icons\\game.ico', iconIndex: 0,
   confidence: 1, candidates: [{ path: 'C:\\Games\\Game.exe' }] }));
@@ -56,6 +57,8 @@ const handlers = {
   'art:thumbnail': (file) => { assert.ok(['C:\\Icons\\game.ico', 'C:\\Icons\\downloaded.ico', 'C:\\Images\\applied-grid.png'].includes(file)); return file.endsWith('game.ico') ? icon : downloadedIcon; },
   'art:current': () => null,
   'art:official': () => null,
+  'art:wallpaper-available': () => ({ width: 1920, height: 1080 }),
+  'art:set-wallpaper': (kind, image, fit) => { assert.equal(kind, 'grid'); assert.equal(fit, 'fit'); wallpaperImage = image; },
   'steam:artwork-search': () => [{ id: 42, name: 'Steam match' }],
   'art:logo-position': () => null,
   'art:download': (req) => {
@@ -68,6 +71,7 @@ const handlers = {
   'steam:read': () => { steamReadAccounts.push(cfg.steam_user_id); return steamEntries; },
   'steam:games': () => installedGames,
   'sgdb:by-steam': () => null,
+  'match:auto': ({ rows }) => ({ rows: rows.map(row => ({ ...row, sgdbId: 17, sgdbName: 'Matched game' })) }),
   'scan:start': () => cfg.steam_executables,
   'resolve:name': () => null,
   'steam:add': (req) => { steamRequest = req; return { rows: req.rows.map(row => ({ ...row, managed: true })), lines: ['Saved shortcuts.vdf: 0 added, 1 updated.', 'Artwork results ready.'], added: 0, updated: 1, artworkSaved: 0 }; },
@@ -131,8 +135,8 @@ app.whenReady().then(async () => {
     await wait(`!document.querySelector(${JSON.stringify(selector)})?.open`);
   };
   const selectDestination = async value => {
-    await change('#desktop-destination', value);
-    await wait("!document.querySelector('#desktop-destination').disabled");
+    await click(`#desktop-destination [data-destination="${value}"]`);
+    await wait("!document.querySelector('#desktop-destination').inert");
   };
   const idle = () => wait("!document.querySelector('#desktop-refresh').disabled");
   await wait("document.querySelector('#page-library').classList.contains('on')");
@@ -223,9 +227,8 @@ app.whenReady().then(async () => {
   await capture('artwork-filter-popover');
   assert.equal(await run(`(() => {
     const fields = document.querySelector('#art-filter-fields');
-    const groups = [...fields.querySelectorAll('fieldset')].map(node => node.getBoundingClientRect());
-    return fields.scrollWidth <= fields.clientWidth && groups[0].right <= groups[1].left
-      && document.querySelector('.thumbScroll').clientHeight > 0;
+    return fields.scrollWidth <= fields.clientWidth && !fields.querySelector('.filter-size-disclosure').open
+      && document.querySelector('#art-filter-reset').getClientRects().length > 0;
   })()`), true);
   await run("document.querySelector('#art-filter-fields input[data-filter=humor]').checked = false");
   await click('#art-filter-fields input[data-filter=humor]');
@@ -242,6 +245,7 @@ app.whenReady().then(async () => {
   await wait("document.querySelector('#art-filter-fields input[data-filter=untagged]').checked");
   assert.equal(await run("document.querySelector('#art-filter-fields input[data-filter=nsfw]').checked"), false);
   assert.equal(await run("document.querySelector('#art-filter-fields input[data-filter=static]').checked"), true);
+  await click('.filter-size-disclosure summary');
   await click('#art-filter-fields input[data-filter=dimensions][value="512"]');
   await wait(() => cfg.artwork_filters.icon.dimensions?.includes('256') && !cfg.artwork_filters.icon.dimensions.includes('512'));
   await wait(() => artRequests.at(-1).filters.dimensions?.includes('256') && !artRequests.at(-1).filters.dimensions.includes('512'));
@@ -382,6 +386,21 @@ app.whenReady().then(async () => {
   assert.equal(await run("document.querySelector('#art-tabs .on').textContent.startsWith('Cover')"), true);
   await click('#art-grid > .thumb .thumb-select');
   await run("document.querySelector('#art-grid > .thumb .thumb-select').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))");
+  await wait("!document.querySelector('#art-preview-wallpaper').disabled");
+  await run("document.querySelector('.preview-image-wrap').dispatchEvent(new WheelEvent('wheel', { deltaY: -240, cancelable: true }))");
+  assert.equal(await run("document.querySelector('#art-preview-zoom').textContent"), 'Fit to window');
+  await click('#art-preview-wallpaper');
+  assert.equal(wallpaperImage, undefined);
+  await click('#wallpaper-options [value="fit"]');
+  assert.equal(await run("getComputedStyle(document.querySelector('.wallpaper-sample img')).objectFit"), 'contain');
+  await click('#wallpaper-apply');
+  await wait(() => wallpaperImage?.startsWith('data:image/jpeg;base64,'));
+  await wait("!document.querySelector('#wallpaper-options').open");
+  await run("document.dispatchEvent(new MouseEvent('mouseup', { button: 3 }))");
+  win.webContents.send('nav:cmd', 'back');
+  await wait("document.querySelector('#art-preview').hidden");
+  assert.equal(await run("document.querySelector('#art-preview').hidden && !document.querySelector('#art-overlay').hidden"), true);
+  await run("document.dispatchEvent(new MouseEvent('mouseup', { button: 4 }))");
   await wait("!document.querySelector('#art-preview').hidden");
   await click('#art-preview-back');
   await click('#art-cancel');
@@ -392,6 +411,10 @@ app.whenReady().then(async () => {
   await run("[...document.querySelectorAll('#art-tabs button')].find(button => button.textContent.startsWith('Logo')).click()");
   await wait("!document.querySelector('#art-logo-position').hidden && document.querySelectorAll('#art-grid > .thumb').length > 0");
   await click('#art-grid > .thumb .thumb-select');
+  await click('#art-view-full');
+  await wait("!document.querySelector('#art-preview-image').hidden");
+  assert.equal(await run("document.querySelector('#art-preview-wallpaper').hidden"), true);
+  await click('#art-preview-back');
   await click('[data-logo-anchor="UpperCenter"]');
   await click('#art-save');
   await wait("document.querySelector('#art-overlay').hidden");
@@ -420,14 +443,14 @@ app.whenReady().then(async () => {
   await selectDestination('desktop');
   assert.ok(!await run("document.querySelector('#log').textContent.includes('Artwork applied to Steam.')"));
   await idle();
-  await change('#desktop-destination', 'start-menu');
+  await change('#shortcut-location', 'start-menu');
   await wait(() => cfg.desktop_destination === 'start-menu');
   await idle();
   assert.equal(await run("document.querySelector('#desktop-add').textContent"), 'Review 1 change');
   rows[1].exe = rows[0].exe;
   rows[1].destination = 'start-menu';
   rows[1].shortcut = 'C:\\Programs\\Other name.lnk';
-  await change('#desktop-destination', 'both');
+  await change('#shortcut-location', 'both');
   await wait(() => cfg.desktop_destination === 'both');
   await click('#desktop-refresh');
   await idle();
@@ -458,7 +481,7 @@ app.whenReady().then(async () => {
   await idle();
   win.setSize(1060, 740);
   for (const page of ['library', 'desktop']) {
-    await selectDestination(page === 'library' ? 'steam' : 'both');
+    await selectDestination(page === 'library' ? 'steam' : 'desktop');
     assert.ok(await run("document.documentElement.scrollWidth <= innerWidth"), `${page} must fit the minimum window width`);
     assert.ok(await run(`{
       const line = document.querySelector('#page-${page} .browse-line');
@@ -498,6 +521,14 @@ app.whenReady().then(async () => {
   await click('#exe-add');
   const launchersShown = () => run("[...document.querySelectorAll('#games .game-name')].filter(item => item.textContent.startsWith('Extra launcher')).length");
   await wait(async () => await launchersShown() === 2);
+  await click('#btn-add');
+  await wait("document.querySelector('#page-review').open");
+  assert.equal(await run("document.querySelector('#review-apply').disabled"), true);
+  await click('.review-section-head input');
+  assert.equal(await run("document.querySelectorAll('.review-row input:checked').length"), 2);
+  await click('.review-row input');
+  assert.equal(await run("document.querySelector('.review-section-head input').indeterminate"), true);
+  await click('#review-back');
   await click('#btn-refresh');
   await wait("!document.querySelector('#btn-refresh').disabled");
   assert.equal(await launchersShown(), 2);
@@ -533,6 +564,8 @@ app.whenReady().then(async () => {
   await capture('library-refined-default');
   await click('#hide-owned');
   assert.ok(await run("document.querySelector('#page-library .library-head #library-grid-count').textContent.endsWith('shown')"));
+  await click('#games .list-empty button');
+  assert.equal(await run("document.querySelector('#hide-owned').checked"), false);
   await click('#add-folders');
   await click('#source-folders button');
   await wait(() => cfg.games_roots.length === 0);
@@ -542,6 +575,12 @@ app.whenReady().then(async () => {
     const toast = popup.querySelector('#toast.show');
     popup.open && toast?.textContent.includes('Add a game folder') && !toast._fly;
   }`), 'The no-folder warning stays visible in the folder popup without flying to the log');
+  await click('#close-add');
+  await click('#games .game-name');
+  await click('#art-find-for-me');
+  await wait("document.querySelector('#art-status').textContent.startsWith('Found 5 artwork choices')");
+  await click('#art-cancel');
+  await wait("document.querySelector('#art-overlay').hidden");
   console.log('Desktop fixture checks passed');
   win.destroy();
   app.exit(0);

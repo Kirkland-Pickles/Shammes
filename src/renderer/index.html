@@ -28,9 +28,9 @@
 <section id="library-setup" aria-labelledby="setup-title" hidden></section>
 <main id="pages">
 <div class="library-destination" id="page-nav" hidden>
-    <label class="tool-select"><span class="destination-label">Destination</span>
-      <select id="desktop-destination"><option value="steam">Steam</option><option value="desktop">Desktop</option><option value="start-menu">Start menu</option><option value="both">Desktop and Start menu</option></select>
-    </label>
+    <div class="destination-tabs" id="desktop-destination" role="group" aria-label="Destination">
+      <button type="button" data-destination="steam" aria-pressed="true">Steam</button><button type="button" data-destination="desktop" aria-pressed="false">Windows</button>
+    </div>
 
     </div>
 
@@ -39,6 +39,25 @@
     <header class="library-head"><div><h1 id="review-title">Review changes</h1><p id="review-summary" class="sub"></p></div><button class="text-btn" id="review-back">Back to library</button></header>
     <div id="review-list" role="list"></div>
     <div class="review-footer"><span id="review-status" role="status"></span><button class="btn primary" id="review-apply">Apply changes</button></div>
+  </dialog>
+  <dialog id="wallpaper-options" closedby="any" aria-labelledby="wallpaper-options-title">
+    <form id="wallpaper-form">
+      <h2 id="wallpaper-options-title">Desktop background</h2>
+      <div class="wallpaper-sample" aria-label="Preview on primary display"><img alt="" src="../assets/app-icon.svg"></div>
+      <fieldset class="wallpaper-modes">
+        <legend>Picture fit</legend>
+        <label><input type="radio" name="fit" value="fill" checked> Fill</label>
+        <label><input type="radio" name="fit" value="fit"> Fit</label>
+        <label><input type="radio" name="fit" value="stretch"> Stretch</label>
+        <label><input type="radio" name="fit" value="center"> Center</label>
+      </fieldset>
+      <p id="wallpaper-fit-note" class="muted"></p>
+      <p id="wallpaper-feedback" role="status" hidden></p>
+      <footer class="modal-foot">
+        <span class="spacer"></span><button class="btn sm" id="wallpaper-cancel" type="button">Cancel</button>
+        <button class="btn primary sm" id="wallpaper-apply" type="submit">Set background</button>
+      </footer>
+    </form>
   </dialog>
   <dialog closedby="any" id="library-intro" aria-labelledby="library-intro-title" aria-describedby="library-intro-copy">
     <header class="library-head"><h1 id="library-intro-title" tabindex="-1" autofocus>Welcome to Lib Shammes</h1></header>
@@ -89,7 +108,9 @@
       </div>
 
       <div class="desktop-apply-group">
-
+        <label class="tool-select shortcut-location">Shortcuts to
+          <select id="shortcut-location"><option value="desktop">Desktop</option><option value="start-menu">Start menu</option><option value="both">Desktop and Start menu</option></select>
+        </label>
         <button class="btn sm" id="desktop-refresh"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Refresh</button><button class="btn primary library-apply" id="desktop-add">Review changes</button>
       </div>
     </header>
@@ -128,10 +149,9 @@
       <div class="art-query">
         <input id="art-q" type="search" placeholder="Search SteamGridDB" aria-label="Search SteamGridDB" autocomplete="off">
         <button class="btn sm" id="art-search">Search</button>
-        <details id="art-matches" hidden>
-          <summary>Matches</summary>
-          <select size="3" id="art-games" aria-label="Matching games"></select>
-        </details>
+        <div id="art-matches" hidden>
+          <select id="art-games" aria-label="Matching games" hidden></select><div class="choice-list"></div>
+        </div>
       </div>
 
       <div class="art-id-advanced"><label class="muted" for="art-id">Game ID</label><input id="art-id" type="text" inputmode="numeric" aria-label="SteamGridDB game ID"></div>
@@ -146,29 +166,41 @@
       <div id="art-grid"></div>
       <section id="game-settings" hidden aria-labelledby="game-settings-title">
         <h3 id="game-settings-title" tabindex="-1">Game settings</h3>
+        <button class="btn sm" id="art-find-for-me" type="button" hidden>Find artwork for me</button>
         <div id="steam-game-settings">
-          <div class="manage-actions">
-            <button class="btn sm" id="d-open" type="button">Open folder</button>
-            <button class="text-btn" id="btn-remove" type="button" hidden>Remove Steam shortcut</button>
-          </div>
           <details class="launcher-editor"><summary>Name and launcher</summary>
             <label class="fld"><span>Name in Steam</span><input id="d-name" type="text"></label>
             <label class="field-label" for="d-exe-pick">Executable</label>
-            <div class="control-combo"><select id="d-exe-pick" size="2"></select><button class="btn sm" id="d-browse" type="button">Browse</button></div>
+            <div class="launcher-choice">
+              <details class="launcher-candidates"><summary><span></span></summary><select id="d-exe-pick" aria-label="Executable choices" hidden></select><div class="choice-list"></div></details>
+              <button class="btn sm" id="d-browse" type="button">Browse</button>
+            </div>
             <details id="steam-launch-settings"><summary>Advanced launch settings</summary>
               <label class="fld"><span>Start in</span><input id="d-startdir" type="text"></label>
               <label class="fld"><span>Launch arguments</span><input id="d-args" type="text"></label>
             </details>
           </details>
+          <div class="manage-actions">
+            <button class="btn sm" id="d-open" type="button">Open folder</button>
+            <button class="text-btn" id="btn-remove" type="button" hidden>Remove Steam shortcut</button>
+          </div>
         </div>
         <div id="desktop-game-settings"></div>
       </section>
-      <div id="art-preview" hidden><button class="btn sm" id="art-preview-back">Back to artwork</button><img id="art-preview-image" alt="Artwork preview" decoding="async"></div>
+      <div id="art-preview" hidden>
+        <div class="preview-tools">
+          <button class="btn sm" id="art-preview-back" type="button">Back to artwork</button>
+          <span id="art-preview-size" role="status"></span>
+          <button class="text-btn" id="art-preview-zoom" type="button" disabled>Actual size</button>
+          <button class="btn sm" id="art-preview-wallpaper" type="button" hidden disabled>Set as desktop background</button>
+        </div>
+        <div class="preview-image-wrap" tabindex="0" aria-label="Artwork image viewer"><div class="preview-image-stage"><img id="art-preview-image" src="../assets/app-icon.svg" alt="Full artwork" decoding="async" draggable="false" hidden></div></div>
+      </div>
     </div>
     <form id="art-url-entry" hidden><label class="fld"><span>Image URL</span><input id="art-url-input" type="url" placeholder="https://…" required></label><button class="btn sm" type="submit">Use image</button><button class="btn sm" id="art-url-cancel" type="button">Cancel</button></form>
     <footer class="modal-foot">
       <button class="btn sm" id="art-url">From URL</button><button class="btn sm" id="art-file">From file</button>
-      <button class="btn sm" id="art-clear">Restore default</button><span class="spacer"></span><button class="btn sm" id="art-cancel">Cancel</button><button class="btn primary sm" id="art-save">Save</button>
+      <button class="btn sm" id="art-clear">Restore default</button><button class="text-btn" id="art-view-full" type="button" hidden>View full image</button><span class="spacer"></span><button class="btn sm" id="art-cancel">Cancel</button><button class="btn primary sm" id="art-save">Save</button>
     </footer>
   </section>
 </div>

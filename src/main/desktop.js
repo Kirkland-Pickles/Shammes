@@ -389,10 +389,19 @@ function createDesktop({ app, shell, nativeImage, personal, shared, startMenu, s
       }`;
     const pending = exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
       { windowsHide: true, timeout: 30000 }).then(({ stdout }) => `data:image/png;base64,${stdout.trim()}`)
-      .catch((error) => {
+      .catch(async (error) => {
+        if (error.killed) {
+          iconPreviews.delete(key);
+          throw new Error('Windows took too long to load the icon. Try again.');
+        }
+        if (index === 0) {
+          try {
+            const image = await app.getFileIcon(file, { size: 'large' });
+            if (!image.isEmpty()) return image.toDataURL();
+          } catch {}
+        }
         iconPreviews.delete(key);
-        if (error.killed) throw new Error('Windows took too long to load the icon. Try again.');
-        throw error;
+        throw new Error('No icon found in the selected file.');
       });
     if (iconPreviews.size >= 64) iconPreviews.delete(iconPreviews.keys().next().value);
     iconPreviews.set(key, pending);

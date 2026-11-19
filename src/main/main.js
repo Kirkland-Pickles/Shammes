@@ -3,7 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const { randomUUID } = require('crypto');
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell, nativeTheme, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell, nativeTheme, nativeImage, screen } = require('electron');
 
 if (app.isPackaged) Menu.setApplicationMenu(null);
 
@@ -14,6 +14,7 @@ const resolveMod = require('./resolve');
 const strips = require('./strips');
 const sgdbMod = require('./sgdb');
 const images = require('./images');
+const { setWallpaper } = require('./wallpaper');
 const { createDesktop } = require('./desktop');
 const { elevateShortcut, runShortcutHelper } = require('./desktop-elevation');
 const desktop = createDesktop({ app, shell, nativeImage, elevate: (row) => elevateShortcut(app, row) });
@@ -356,6 +357,32 @@ function previewThumbnail(file) {
 }
 ipcMain.handle('art:preview-file', (_e, file) => previewFile(file));
 ipcMain.handle('art:thumbnail', (_e, file) => previewThumbnail(file));
+ipcMain.handle('art:wallpaper-available', () => {
+  if (process.platform !== 'win32') return null;
+  const { size, scaleFactor } = screen.getPrimaryDisplay();
+  return { width: Math.round(size.width * scaleFactor), height: Math.round(size.height * scaleFactor) };
+});
+ipcMain.handle('art:wallpaper-source', async (_e, source) => {
+  if (process.platform !== 'win32') throw new Error('Desktop backgrounds are available on Windows.');
+  const url = new URL(source);
+  if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new Error('Choose an image URL.');
+  const bytes = await client().downloadBytes(url.href, 32 * 1024 * 1024);
+  return Uint8Array.from(bytes);
+});
+ipcMain.handle('art:set-wallpaper', async (_e, kind, data, fit) => {
+  if (!['grid', 'wide', 'hero'].includes(kind)) throw new Error('Choose a cover or background.');
+  const prefix = 'data:image/jpeg;base64,';
+  if (typeof data !== 'string' || !data.startsWith(prefix) || data.length > 45_000_000) throw new Error('Could not encode the background image.');
+  const jpeg = Buffer.from(data.slice(prefix.length), 'base64');
+  if (jpeg.length < 4 || jpeg.length > 32 * 1024 * 1024 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) {
+    throw new Error('Could not encode the background image.');
+  }
+  try { await setWallpaper(path.join(store.configDir(), 'wallpapers'), jpeg, fit); }
+  catch (error) {
+    console.error('Desktop background:', error.message);
+    throw new Error('Windows could not set the desktop background.');
+  }
+});
 ipcMain.handle('art:official', async (_e, req) => {
   const appid = Number(req?.row?.steamAppid);
   if (!Number.isSafeInteger(appid) || appid <= 0 || appid > 0xffffffff || !Object.hasOwn(steam.ART_SUFFIXES, req?.kind)) return null;
@@ -456,9 +483,12 @@ ipcMain.handle('util:check-update', async () => {
 });
 
 // ------------------------------------------------------------------ scan
-function scanFolders(req) {
+let folderScanCache = null;
+function scanFolders(req, force = false) {
   const roots = (req && Array.isArray(req.roots) ? req.roots : []).filter(Boolean);
   if (!roots.length) throw new Error('Scan needs at least one folder.');
+  const key = JSON.stringify([roots, cfg.folder_depths, cfg.steam_path]);
+  if (!force && folderScanCache?.key === key) return folderScanCache.games;
   const seen = new Set();
   const games = [];
   for (let ri = 0; ri < roots.length; ri++) {
@@ -473,7 +503,9 @@ function scanFolders(req) {
   }
   progress(0, 0, '');
   const catalog = cfg.steam_path ? steam.listInstalledGames(cfg.steam_path) : [];
-  return games.map(game => resolveMod.identifyFromCatalog(game, catalog));
+  const resolved = games.map(game => resolveMod.identifyFromCatalog(game, catalog));
+  folderScanCache = { key, games: resolved };
+  return resolved;
 }
 function savedExecutables(library) {
   const catalog = cfg.steam_path ? steam.listInstalledGames(cfg.steam_path) : [];
@@ -483,7 +515,7 @@ function savedExecutables(library) {
   }).map(game => resolveMod.identifyFromCatalog(game, catalog));
 }
 ipcMain.handle('scan:start', (_e, req) => {
-  const games = req?.roots?.length ? scanFolders(req) : [];
+  const games = req?.roots?.length ? scanFolders(req, !!req.force) : [];
   const seen = new Set(games.map((game) => store.folderKey(game.exePath)));
   return [...games, ...savedExecutables('steam').filter((game) => {
     const key = store.folderKey(game.exePath);
@@ -492,11 +524,11 @@ ipcMain.handle('scan:start', (_e, req) => {
   })];
 });
 let desktopJob = false;
-ipcMain.handle('desktop:scan', async () => {
+ipcMain.handle('desktop:scan', async (_e, force = false) => {
   if (desktopJob) throw new Error('Desktop library is busy.');
   desktopJob = true;
   try {
-    const games = cfg.games_roots.length ? scanFolders({ roots: cfg.games_roots }) : [];
+    const games = cfg.games_roots.length ? scanFolders({ roots: cfg.games_roots }, !!force) : [];
     return await desktop.discover([...games, ...savedExecutables('desktop')], 'both');
   } finally { desktopJob = false; }
 });

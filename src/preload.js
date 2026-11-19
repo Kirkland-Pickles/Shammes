@@ -3,7 +3,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
-  desktopScan: () => ipcRenderer.invoke('desktop:scan'),
+  desktopScan: (force) => ipcRenderer.invoke('desktop:scan', force),
   desktopApply: (rows) => ipcRenderer.invoke('desktop:apply', rows),
   desktopIcon: (file, index) => ipcRenderer.invoke('desktop:icon', file, index),
   desktopPickIcon: () => ipcRenderer.invoke('desktop:pick-icon'),
@@ -38,6 +38,9 @@ contextBridge.exposeInMainWorld('api', {
   artList: (req) => ipcRenderer.invoke('art:list', req),
   artThumbnail: (file) => ipcRenderer.invoke('art:thumbnail', file),
   artPreviewFile: (file) => ipcRenderer.invoke('art:preview-file', file),
+  artWallpaperAvailable: () => ipcRenderer.invoke('art:wallpaper-available'),
+  artWallpaperSource: (url) => ipcRenderer.invoke('art:wallpaper-source', url),
+  artSetWallpaper: (kind, data, fit) => ipcRenderer.invoke('art:set-wallpaper', kind, data, fit),
   artCurrent: (req) => ipcRenderer.invoke('art:current', req),
   artOfficial: (req) => ipcRenderer.invoke('art:official', req),
   artLogoPosition: (row) => ipcRenderer.invoke('art:logo-position', row),

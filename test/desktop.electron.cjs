@@ -30,6 +30,10 @@ app.whenReady().then(async () => {
   assert.equal(rows[0].admin, false);
   const alternate = path.join(root, 'Launcher.exe');
   fs.writeFileSync(alternate, 'fixture');
+  const fallbackIcon = await desktop.preview(alternate, 0);
+  assert.ok(!nativeImage.createFromDataURL(fallbackIcon).isEmpty());
+  assert.equal(await desktop.preview(alternate, 0), fallbackIcon);
+  await assert.rejects(desktop.preview(alternate, 1), /No icon found in the selected file\./);
   const alternateLink = path.join(personal, 'Existing launcher.lnk');
   assert.ok(shell.writeShortcutLink(alternateLink, 'create', { target: alternate }));
   const alternateRows = (await desktop.discover([{ ...games[0], candidates: [{ path: exe }, { path: alternate }] }])).rows;

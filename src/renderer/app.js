@@ -58,7 +58,7 @@ function renderLog() {
 }
 function status(t) { $('#status').textContent = t; }
 function setBar(cur_, total) {
-  $('#fill').style.width = total > 0 ? `${(100 * cur_) / total}%` : '0';
+  $('#fill').style.transform = `scaleX(${total > 0 ? cur_ / total : 0})`;
   // Hide bar when there's no job
   const wrap = $('#progwrap');
   if (wrap) wrap.hidden = !(total > 0);
@@ -211,28 +211,32 @@ function applyTheme() {
 function libraryView() {
   return S.cfg?.startup_library === 'desktop' ? 'desktop' : 'library';
 }
-async function showLibrary() {
+async function showLibrary(switching = false) {
   const desktop = libraryView() === 'desktop';
-  const tools = $('#page-nav');
-  const bar = $(desktop ? '#page-desktop .browse-tools' : '#page-library .browse-tools');
-  $('#steam-shortcut-actions').hidden = desktop;
-  bar.append(tools);
-  const outside = $('#library-tools');
-  bar.parentElement.append(outside);
-  outside.hidden = false;
-  tools.hidden = false;
-  $('#desktop-destination').value = desktop ? S.cfg.desktop_destination || 'desktop' : 'steam';
-  renderLibrarySetup();
-  $('#page-library').classList.toggle('on', !desktop);
-  $('#page-desktop').classList.toggle('on', desktop);
-  renderLog();
-  if (desktop) {
-    renderDesktop();
-    await refreshDesktop(false);
-  } else {
-    renderRows();
-    await loadLibrary();
+  const load = desktop ? () => refreshDesktop(false) : loadLibrary;
+  const reveal = () => {
+    const tools = $('#page-nav');
+    const bar = $(desktop ? '#page-desktop .browse-tools' : '#page-library .browse-tools');
+    $('#steam-shortcut-actions').hidden = desktop;
+    bar.append(tools);
+    const outside = $('#library-tools');
+    bar.parentElement.append(outside);
+    outside.hidden = false;
+    tools.hidden = false;
+    for (const button of $$('#desktop-destination button')) button.setAttribute('aria-pressed', String(button.dataset.destination === (desktop ? 'desktop' : 'steam')));
+    $('#shortcut-location').value = S.cfg.desktop_destination || 'desktop';
+    renderLibrarySetup();
+    $('#page-library').classList.toggle('on', !desktop);
+    $('#page-desktop').classList.toggle('on', desktop);
+    renderLog();
+  };
+  if (switching) {
+    try { await load(); } finally { reveal(); }
+    return;
   }
+  reveal();
+  if (desktop) renderDesktop(); else renderRows();
+  await load();
 }
 
 // ---------------------------------------------------------- shared cards
@@ -258,8 +262,7 @@ function renderLibrarySetup() {
     : 'Add a SteamGridDB key to browse artwork. You can also use images from your computer.'}</p></div>
     <div class="setup-actions">${needsSteam && !S.steamFound ? '<button class="btn sm" id="connect-steam">Connect Steam</button>' : ''}
     ${needsSteam && S.steamFound ? '<button class="btn sm" data-setup="refresh">Check again</button>' : ''}
-    ${needsKey ? '<button class="btn sm" data-setup="key">Add artwork key</button><button class="text-btn setup-dismiss" data-setup="dismiss" aria-label="Dismiss" title="Dismiss">&times;</button>' : ''}
-    ${steamView ? '' : '<button class="btn sm" data-setup="folder">Add game folder</button>'}</div>`;
+    ${needsKey ? '<button class="btn sm" data-setup="key">Add artwork key</button><button class="text-btn setup-dismiss" data-setup="dismiss" aria-label="Dismiss" title="Dismiss">&times;</button>' : ''}</div>`;
   const dismiss = $('[data-setup=dismiss]', panel);
   if (dismiss) dismiss.onclick = () => { keyNoticeDismissed = true; renderLibrarySetup(); };
   const connect = $('#connect-steam', panel);
@@ -268,7 +271,6 @@ function renderLibrarySetup() {
   if (key) key.onclick = () => { $('#preferences').open = true; $('[data-r="key"]').focus(); };
   const refresh = $('[data-setup="refresh"]', panel);
   if (refresh) refresh.onclick = handleAction('Check Steam', async () => { await detectSteam(); await showLibrary(); });
-  $('[data-setup="folder"]', panel)?.addEventListener('click', openFolders);
 }
 let lastDetectedSteamPath = '';
 function steamCard() {
@@ -280,7 +282,7 @@ function steamCard() {
     <div class="row"><input type="text" data-r="path" style="flex:1" placeholder="detecting…">
     <button class="btn sm" data-r="browse">Browse…</button></div>
     <div class="row"><span class="muted">User:</span>
-    <select size="3" data-r="user" style="flex:1"></select></div>
+    <select data-r="user" aria-label="Steam account" hidden></select><div class="choice-list"></div></div>
     <div class="status-line" data-r="status">Detecting…</div>
     <div class="note">Steam closes while changes are applied and reopens afterward if it was running.</div>`;
   const q = (s) => d.querySelector(`[data-r="${s}"]`);
@@ -296,6 +298,7 @@ function steamCard() {
     q('user').parentElement.hidden = S.steamUsers.length <= 1;
     q('user').innerHTML = S.steamUsers.map((u) =>
       `<option value="${esc(u.id)}"${u.id === S.cfg.steam_user_id ? ' selected' : ''}>${esc(userLabel(u))}</option>`).join('');
+    renderChoiceList(q('user'));
   };
   // Status always reflects a live steam.exe check - never a saved string,
   // so a stale/invalid path can no longer show "Found".
@@ -780,6 +783,54 @@ function rowByKey(key) {
   return S.rows.find((r) => rowKey(r) === key);
 }
 
+function renderChoiceList(pick) {
+  const list = pick.nextElementSibling;
+  const focused = list.contains(document.activeElement) ? document.activeElement.dataset.index : null;
+  list.setAttribute('role', 'group');
+  list.setAttribute('aria-label', pick.getAttribute('aria-label'));
+  list.innerHTML = [...pick.options].map((option, index) => `<button type="button" data-index="${index}" aria-pressed="${option.selected}" tabindex="${option.selected || pick.selectedIndex < 0 && index === 0 ? 0 : -1}" title="${esc(option.title || option.textContent)}">${esc(option.textContent)}</button>`).join('');
+  list.onclick = event => {
+    const button = event.target.closest('button[data-index]');
+    if (!button) return;
+    const index = Number(button.dataset.index);
+    const changed = index !== pick.selectedIndex;
+    pick.selectedIndex = index;
+    for (const item of list.children) {
+      item.setAttribute('aria-pressed', String(item === button));
+      item.tabIndex = item === button ? 0 : -1;
+    }
+    if (changed) pick.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  list.onkeydown = event => {
+    const buttons = [...list.children];
+    const index = buttons.indexOf(event.target);
+    if (index < 0) return;
+    const to = { ArrowUp: index - 1, ArrowDown: index + 1, Home: 0, End: buttons.length - 1 }[event.key];
+    if (to === undefined) return;
+    event.preventDefault();
+    const next = buttons[Math.min(buttons.length - 1, Math.max(0, to))];
+    event.target.tabIndex = -1;
+    next.tabIndex = 0;
+    next.focus();
+  };
+  if (focused != null && list.children[Number(focused)]) {
+    list.children[Number(focused)].focus({ preventScroll: true });
+  }
+}
+
+function updateLauncherChoice(pick) {
+  const choices = pick.closest('.launcher-candidates');
+  const summary = $('summary', choices);
+  const multiple = pick.options.length > 1;
+  $('span', summary).textContent = pick.selectedOptions[0]?.textContent || 'No launcher selected';
+  summary.title = pick.value;
+  summary.tabIndex = multiple ? 0 : -1;
+  summary.onclick = multiple ? null : event => event.preventDefault();
+  choices.classList.toggle('has-alternatives', multiple);
+  if (!multiple) choices.open = false;
+  renderChoiceList(pick);
+}
+
 function renderSteamGameSettings(row) {
   const editable = row.source !== 'steam';
   $('#steam-game-settings .launcher-editor').hidden = !editable;
@@ -821,7 +872,8 @@ function renderSteamGameSettings(row) {
     pick.appendChild(o);
   }
   pick.value = row.exe || '';
-  pick.title = pick.value;
+  pick.closest('details').open = false;
+  updateLauncherChoice(pick);
   const locked = row.source === 'steam';
   $('#d-name').disabled = locked;
   pick.disabled = locked;
@@ -998,6 +1050,15 @@ async function syncSteamLibrary(entries, installed) {
     const owner = (!row.fromExecutableSearch && nativeRows.find(native => insideGameFolder(row.folder, native.startDir)))
       || row.exe && shortcutByExe.get(folderKey(row.exe));
     if (!owner) return true;
+    if (owner.source === 'shortcut') {
+      const known = new Set(owner.candidates.map(candidate => folderKey(candidate.path)));
+      for (const candidate of row.candidates || []) {
+        const path = folderKey(candidate.path);
+        if (known.has(path)) continue;
+        owner.candidates.push(candidate);
+        known.add(path);
+      }
+    }
     // Pending edits take priority over applied previews. Steam edits win ties.
     if ((!owner.pendingArt && row.pendingArt)
       || !Object.keys(owner.art || {}).length && Object.keys(row.art || {}).length) {
@@ -1178,7 +1239,7 @@ function loadLibrary(force = false) {
   const key = libraryKey();
   if (libraryLoad) return libraryLoad.then(() => libraryKey() !== loadedLibraryKey ? loadLibrary() : undefined);
   if (!force && key === loadedLibraryKey) return Promise.resolve();
-  libraryLoad = refreshLibrary().then(() => { loadedLibraryKey = key; }).finally(() => { libraryLoad = null; });
+  libraryLoad = refreshLibrary(force).then(() => { loadedLibraryKey = key; }).finally(() => { libraryLoad = null; });
   return libraryLoad;
 }
 async function doRefresh() {
@@ -1187,7 +1248,7 @@ async function doRefresh() {
   return loadLibrary(true);
 }
 
-async function refreshLibrary() {
+async function refreshLibrary(force = false) {
   const button = $('#btn-refresh');
   button.disabled = true;
   S.loadingLibrary = true;
@@ -1197,7 +1258,7 @@ async function refreshLibrary() {
     const roots = (S.cfg.games_roots || []).filter(Boolean);
     status('Refreshing library…');
     const [games, entries, installed] = await Promise.all([
-      roots.length || S.cfg.steam_executables?.length ? window.api.scanStart({ roots }) : [],
+      roots.length || S.cfg.steam_executables?.length ? window.api.scanStart({ roots, force }) : [],
       window.api.steamRead(), window.api.steamGames(),
     ]);
     S.rows = [...scannedRows(games), ...S.rows.filter((r) => r.source !== 'folder')];
@@ -1542,7 +1603,7 @@ async function refreshDesktop(force = true) {
   try {
     await desktopSave;
     const old = new Map(d.rows.map((row) => [row.id, row]));
-    const result = await window.api.desktopScan();
+    const result = await window.api.desktopScan(force);
     const groups = groupDesktopDestinations(result.rows);
     const choices = { ...S.cfg.desktop_choices };
     let migrated = false;
@@ -1590,7 +1651,7 @@ async function refreshDesktop(force = true) {
     }
     result.warnings.forEach(line => log(line, 'desktop'));
     d.loadedKey = key;
-    status(d.rows.length ? 'Desktop library refreshed.' : 'Add game folders in Settings, then refresh.');
+    status(d.rows.length ? 'Windows library refreshed.' : 'No Windows games found.');
   } finally { d.busy = false; renderDesktop(); }
 }
 
@@ -1673,6 +1734,7 @@ function renderDesktop() {
     else loadCardCover(row, tr);
   }
   for (const id of ['desktop-add', 'desktop-refresh']) $('#' + id).disabled = d.busy;
+  $('#shortcut-location').disabled = d.busy;
   $('#desktop-add').disabled ||= !reviewCount && !missingCount;
   $('#desktop-games').inert = d.busy && !d.applying;
   for (const id of ['desktop-hide']) $('#' + id).disabled = d.busy && !d.applying;
@@ -1695,13 +1757,14 @@ function renderDesktopGameSettings(row) {
   const host = $('#desktop-game-settings');
   const members = desktopMembers(row);
   const exes = [...new Set([row.exe, ...(row.candidates || []).map(item => item.path)])];
-  host.innerHTML = `<div class="manage-actions"><button class="btn sm" id="desktop-game-apply" type="button">${S.cfg.desktop_destination === 'start-menu' ? 'Apply to Start menu' : S.cfg.desktop_destination === 'both' ? 'Apply shortcuts' : 'Apply to Desktop'}</button></div>
-    <details class="launcher-editor"><summary>Name and launcher</summary><label class="fld"><span>Shortcut name</span><input type="text" data-field="display" value="${esc(row.display)}"></label>
-    <label class="field-label" for="desktop-exe">Launcher</label><div class="control-combo"><select id="desktop-exe" size="2" data-field="exe" title="${esc(row.exe)}">${exes.map(exe => `<option value="${esc(exe)}" ${exe === row.exe ? 'selected' : ''}>${esc(baseName(exe))}</option>`).join('')}</select>
+  host.innerHTML = `<details class="launcher-editor" open><summary>Name and launcher</summary><label class="fld"><span>Shortcut name</span><input type="text" data-field="display" value="${esc(row.display)}"></label>
+    <label class="field-label" for="desktop-exe">Executable</label><div class="launcher-choice"><details class="launcher-candidates"><summary><span></span></summary><select id="desktop-exe" aria-label="Executable choices" data-field="exe" hidden>${exes.map(exe => `<option value="${esc(exe)}" ${exe === row.exe ? 'selected' : ''}>${esc(baseName(exe))}</option>`).join('')}</select><div class="choice-list"></div></details>
     <button class="btn sm" data-desktop="browse" type="button">Browse</button></div>
     <label class="fld"><span>Launch arguments</span><input type="text" data-field="args" value="${esc(row.args)}"></label>
     <label class="check desktop-admin"><input type="checkbox" data-field="admin" ${row.admin ? 'checked' : ''}> Run as administrator</label>
-    <div class="status-line">${members.map(member => esc(member.error || member.shortcut || '')).filter(Boolean).join('<br>')}</div></details>`;
+    <div class="status-line">${members.map(member => esc(member.error || member.shortcut || '')).filter(Boolean).join('<br>')}</div></details>
+    <div class="manage-actions"><button class="btn sm" id="desktop-game-apply" type="button">${S.cfg.desktop_destination === 'start-menu' ? 'Apply to Start menu' : S.cfg.desktop_destination === 'both' ? 'Apply shortcuts' : 'Apply to Desktop'}</button></div>`;
+  updateLauncherChoice($('#desktop-exe', host));
   $('#desktop-game-apply', host).onclick = handleAction('Add to Desktop', async () => {
     const modal = S.modal;
     await closeArtModal(artworkSelectionChanged(modal));
@@ -1710,6 +1773,7 @@ function renderDesktopGameSettings(row) {
   for (const input of $$('[data-field]', host)) input.onchange = handleAction('Save Desktop changes', async () => {
     if (input.dataset.field === 'display' && S.modal?.row === row) S.modal.renamedShortcut = true;
     row[input.dataset.field] = input.type === 'checkbox' ? input.checked : input.value;
+    if (input.dataset.field === 'exe') updateLauncherChoice(input);
     await saveDesktopDraft(row);
     renderDesktop();
     if (S.modal?.row === row) $('#art-title').textContent = row.display;
@@ -1721,23 +1785,20 @@ function renderDesktopGameSettings(row) {
     row.exe = exe;
     await saveDesktopDraft(row);
     renderDesktop();
-    if (S.modal === modal) {
-      renderDesktopGameSettings(row);
-      $('.launcher-editor', host).open = true;
-    }
+    if (S.modal === modal) renderDesktopGameSettings(row);
   });
 }
 
 async function renderDesktopIconChoices() {
   const m = S.modal;
-  const exe = await window.api.desktopIcon(m.row.exe);
+  const exe = await window.api.desktopIcon(m.row.exe).catch(() => null);
   if (S.modal !== m) return;
   const slot = $('#art-stock');
-  slot.hidden = false;
-  slot.replaceChildren(artThumb({ url: exe, width: 256, height: 256 }, 'Executable icon', { exeIcon: true, current: !m.row.icon }));
+  slot.hidden = !exe;
+  slot.replaceChildren(...(exe ? [artThumb({ url: exe, width: 256, height: 256 }, 'Executable icon', { exeIcon: true, current: !m.row.icon })] : []));
   const choice = m.row.iconChoice;
-  const url = choice?.file ? await localArtPreview(choice.file) : choice?.url
-    || (m.row.icon ? await desktopIconPreview(m.row) : null);
+  const url = choice?.file ? await localArtPreview(choice.file).catch(() => null) : choice?.url
+    || (m.row.icon ? await desktopIconPreview(m.row).catch(() => null) : null);
   if (S.modal !== m || !url || choice?.exeIcon) return;
   const current = $('#art-choice');
   current.hidden = false;
@@ -1849,8 +1910,8 @@ function savedPickerFilters(kind, defaultsOnly = false) {
     ...(defaultsOnly ? {} : S.cfg.artwork_filters?.[kind]) };
 }
 
-function pickerFilters(kind) {
-  return { ...savedPickerFilters(kind), ...(S.modal?.row.source === 'desktop' ? { static: true, animated: false } : {}) };
+function pickerFilters(kind, row = S.modal?.row) {
+  return { ...savedPickerFilters(kind), ...(row?.source === 'desktop' ? { static: true, animated: false } : {}) };
 }
 
 function collectSavedPickerFilters(kind, inputs) {
@@ -1935,6 +1996,7 @@ function renderArtFilters() {
 
 async function openArtModal(row, focusKind) {
   if (S.modal || S.applyingSteam || S.desktop.busy) return;
+  S.artReturn = S.reviewReturn = null;
   S.modal = {
     row, tab: focusKind || 'grid',
     returnFocus: document.activeElement,
@@ -1951,12 +2013,17 @@ async function openArtModal(row, focusKind) {
   $('#art-title').textContent = row.display;
   $('.thumbScroll').scrollTop = 0;
   const desktop = row.source === 'desktop';
+  $('#art-find-for-me').hidden = !S.cfg.api_key;
+  $('#art-find-for-me').disabled = false;
+  $('#art-find-for-me').textContent = desktop ? 'Find an icon for me' : 'Find artwork for me';
   $('#steam-game-settings').hidden = desktop;
   $('#desktop-game-settings').hidden = !desktop;
   $('#game-settings-title').textContent = row.source === 'steam' ? 'Game actions' : 'Shortcut settings';
-  $('#game-settings').classList.toggle('native-game', row.source === 'steam');
   if (desktop) renderDesktopGameSettings(row);
-  else renderSteamGameSettings(row);
+  else {
+    renderSteamGameSettings(row);
+    $('#steam-game-settings .launcher-editor').open = true;
+  }
   const keyless = !S.cfg.api_key;
   $('.art-id-advanced').hidden = keyless;
   $('#art-q').placeholder = keyless ? 'Search Steam' : 'Search SteamGridDB';
@@ -1968,7 +2035,6 @@ async function openArtModal(row, focusKind) {
   $('#art-q').value = row.query || row.display;
   $('#art-id').value = row.sgdbId || '';
   $('#art-matches').hidden = true;
-  $('#art-matches').open = false;
   $('#art-games').innerHTML = '';
   for (const id of ['art-q', 'art-search', 'art-games', 'art-id']) $('#' + id).disabled = keyless && id === 'art-id';
   $('#art-url-entry').hidden = true;
@@ -2035,13 +2101,13 @@ async function closeArtModal(save, remind = false) {
     const match = m.games.find(game => game.id === m.sgdbId);
     const updated = { ...m.row, iconChoice: m.sel.icon || null, art: { ...m.sel }, sgdbId: m.sgdbId,
       ...(match && m.sgdbId !== m.row.sgdbId
-        ? { display: m.renamedShortcut ? m.row.display : match.name, sgdbName: match.name } : {}) };
+        ? { display: m.renamedShortcut || m.keepName ? m.row.display : match.name, sgdbName: match.name } : {}) };
     try { await saveDesktopDraft(m.row, updated); Object.assign(m.row, Object.fromEntries([...desktopEditFields, 'art'].map(key => [key, updated[key]])));  }
     catch (error) { artStatus(`Choices could not be saved: ${error.message || error}`); return; }
     finally { m.applying = false; $('#art-modal').inert = false; }
   }
   m.moreObserver?.disconnect();
-  if (m.previewLoader) m.previewLoader.src = '';
+  if (m.preview) closeArtPreview();
   $('#art-url-entry').hidden = true;
   S.modal = null;
   $('#game-settings').hidden = true;
@@ -2101,9 +2167,11 @@ function renderArtTabs() {
     const picked = m.sel[kind];
     if (picked) b.textContent += ' ★';
     b.addEventListener('click', () => {
+      const restoreFocus = document.activeElement === b;
       $('#art-url-entry').hidden = true;
       m.tab = kind;
       renderArtTabs();
+      if (restoreFocus) $('.tab.on', host)?.focus({ preventScroll: true });
       renderArtFilters();
       loadArtTabs();
     });
@@ -2114,55 +2182,235 @@ function renderArtTabs() {
     cell.classList.toggle('picked', picked);
     $('.thumb-select', cell)?.setAttribute('aria-pressed', String(picked));
   });
+  const selected = m.sel[m.tab];
+  $('#art-view-full').hidden = !(selected?.file || selected?.url);
 }
 
-function closeArtPreview() {
-  const wasOpen = !$('#art-preview').hidden;
-  if (S.modal) {
-    S.modal.previewItem = null;
-    if (S.modal.previewLoader) S.modal.previewLoader.src = '';
-    S.modal.previewLoader = null;
-  }
+function closeArtPreview(restoreFocus = false) {
+  const preview = S.modal?.preview;
+  if (preview?.loader) preview.loader.removeAttribute('src');
+  if (S.modal) S.modal.preview = null;
+  if (restoreFocus && preview) S.modal.previewReturn = preview;
+  const wallpaperOptions = $('#wallpaper-options');
+  if (wallpaperOptions?.open) wallpaperOptions.close();
   $('#art-preview').hidden = true;
   $('#art-grid').hidden = false;
   $('#game-settings').hidden = S.modal?.tab !== 'manage';
-  $('#art-preview-image').removeAttribute('src');
-  if (wasOpen) $('.thumbScroll').scrollTop = S.modal?.galleryScroll || 0;
+  const image = $('#art-preview-image');
+  image.hidden = true;
+  image.removeAttribute('src');
+  if (preview) $('.thumbScroll').scrollTop = preview.galleryScroll;
+  if (restoreFocus && preview?.trigger?.isConnected) preview.trigger.focus({ preventScroll: true });
 }
 
-async function openArtPreview(item) {
+async function openArtPreview(item, trigger = document.activeElement, kind = S.modal?.tab) {
   const m = S.modal;
-  const kind = m.tab;
-  if (!item) return;
-  const src = item.thumb || item.url || (item.file ? await localArtPreview(item.file) : null);
-  if (S.modal !== m || m.tab !== kind) return;
-  m.previewItem = item;
-  m.galleryScroll = $('.thumbScroll').scrollTop;
-  $('#art-preview').hidden = false;
+  if (!m || !item) return;
+  closeArtPreview();
+  const preview = { item, kind, trigger, galleryScroll: $('.thumbScroll').scrollTop };
+  m.previewReturn = null;
+  m.preview = preview;
+  const active = () => S.modal === m && m.preview === preview;
+  const host = $('#art-preview');
+  const image = $('#art-preview-image');
+  const dimensions = $('#art-preview-size');
+  const zoom = $('#art-preview-zoom');
+  const wallpaper = $('#art-preview-wallpaper');
+  $('#art-filters').open = false;
+  $('#art-matches').hidden = true;
+  host.hidden = false;
+  zoom.disabled = wallpaper.disabled = true;
+  zoom.textContent = 'Actual size';
+  wallpaper.hidden = true;
+  const canSet = ['grid', 'wide', 'hero'].includes(kind)
+    ? window.api.artWallpaperAvailable?.().catch(() => false) : false;
+  dimensions.textContent = 'Loading full image…';
   $('#art-grid').hidden = true;
   $('#game-settings').hidden = true;
   $('.thumbScroll').scrollTop = 0;
-  $('#art-preview-image').src = src;
-  if (item.thumb && item.url && item.thumb !== item.url) {
-    const full = new Image();
-    m.previewLoader = full;
-    full.decoding = 'async';
-    full.src = item.url;
-    artStatus('Loading full-size artwork…');
-    full.decode().then(() => {
-      if (S.modal !== m || m.previewItem !== item) return;
-      $('#art-preview-image').src = item.url;
-      m.previewLoader = null;
-      artStatus('Full-size artwork loaded.');
-    }).catch(() => {
-      if (S.modal === m && m.previewItem === item) artStatus('Full-size image could not load. Showing the preview.');
-    });
+  $('#art-preview-back').focus({ preventScroll: true });
+  const decode = async src => {
+    if (!src) throw new Error('No image source.');
+    const loader = preview.loader = new Image();
+    loader.src = src;
+    await loader.decode();
+    return loader;
+  };
+  try {
+    let full = true;
+    let decoded;
+    try {
+      const src = item.url || (item.file ? await localArtPreview(item.file) : null);
+      if (!active()) return;
+      decoded = await decode(src);
+    } catch {
+      if (!active()) return;
+      full = false;
+      decoded = await decode(item.thumb && item.thumb !== item.url ? item.thumb : null);
+    }
+    if (!active()) return;
+    image.src = decoded.src;
+    image.hidden = false;
+    dimensions.textContent = `${decoded.naturalWidth} × ${decoded.naturalHeight}${full ? '' : ' · preview only'}`;
+    preview.image = decoded;
+    setPreviewZoom(preview);
+    const display = full ? await canSet : null;
+    if (active() && display?.width > 0 && display.height > 0) {
+      preview.display = display;
+      wallpaper.hidden = wallpaper.disabled = false;
+    }
+  } catch {
+    if (active()) dimensions.textContent = 'Could not load this image.';
   }
+}
+
+function setPreviewZoom(preview, requested, point) {
+  if (!preview?.image) return;
+  const box = $('.preview-image-wrap');
+  const image = $('#art-preview-image');
+  const width = preview.image.naturalWidth;
+  const height = preview.image.naturalHeight;
+  const fit = Math.min(1, box.offsetWidth / width, box.offsetHeight / height);
+  if (!fit) return;
+  const scale = Math.min(4, Math.max(fit, requested ?? fit));
+  const bounds = box.getBoundingClientRect();
+  const x = point?.clientX ?? bounds.left + box.clientWidth / 2;
+  const y = point?.clientY ?? bounds.top + box.clientHeight / 2;
+  const before = image.getBoundingClientRect();
+  const u = before.width ? Math.min(1, Math.max(0, (x - before.left) / before.width)) : .5;
+  const v = before.height ? Math.min(1, Math.max(0, (y - before.top) / before.height)) : .5;
+  image.style.width = `${Math.max(1, Math.floor(width * scale))}px`;
+  image.style.height = `${Math.max(1, Math.floor(height * scale))}px`;
+  const zoomed = scale > fit;
+  if (zoomed) {
+    const after = image.getBoundingClientRect();
+    box.scrollBy(after.left + after.width * u - x, after.top + after.height * v - y);
+  } else box.scrollTo(0, 0);
+  Object.assign(preview, { scale, zoomed });
+  box.classList.toggle('pannable', box.scrollWidth > box.clientWidth || box.scrollHeight > box.clientHeight);
+  const button = $('#art-preview-zoom');
+  button.disabled = !zoomed && fit === 1;
+  button.textContent = zoomed ? 'Fit to window' : 'Actual size';
+}
+
+function wirePreviewZoom() {
+  const box = $('.preview-image-wrap');
+  $('#art-preview-zoom').onclick = () => {
+    const preview = S.modal?.preview;
+    setPreviewZoom(preview, preview?.zoomed ? undefined : 1);
+  };
+  box.addEventListener('wheel', event => {
+    const preview = S.modal?.preview;
+    if (!preview?.image || !event.deltaY) return;
+    event.preventDefault();
+    const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 120 : 1);
+    setPreviewZoom(preview, preview.scale * Math.exp(-Math.max(-240, Math.min(240, delta)) / 480), event);
+  }, { passive: false });
+  let drag;
+  box.addEventListener('pointerdown', event => {
+    if (!S.modal?.preview || !box.classList.contains('pannable') || event.button !== 0
+      || event.target.id !== 'art-preview-image') return;
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, left: box.scrollLeft, top: box.scrollTop };
+    box.setPointerCapture(event.pointerId);
+    box.classList.add('dragging');
+  });
+  box.addEventListener('pointermove', event => {
+    if (drag?.id === event.pointerId) box.scrollTo(drag.left + drag.x - event.clientX, drag.top + drag.y - event.clientY);
+  });
+  box.addEventListener('lostpointercapture', () => { drag = null; box.classList.remove('dragging'); });
+  new ResizeObserver(() => {
+    const preview = S.modal?.preview;
+    if (preview?.image) setPreviewZoom(preview, preview.zoomed ? preview.scale : undefined);
+  }).observe(box);
+}
+
+function wallpaperImageSize(image) {
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  const scale = Math.min(1, 8192 / Math.max(width, height), Math.sqrt(36_000_000 / (width * height)));
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
+function encodeWallpaper(image) {
+  const { width, height } = wallpaperImageSize(image);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', .94);
+}
+
+const wallpaperFitNotes = {
+  fill: 'Fills the screen and crops the edges if needed.',
+  fit: 'Shows the whole image, with space around it if needed.',
+  stretch: 'Fills the screen and may distort the image.',
+  center: 'Shows the image at its original size in the center.',
+};
+
+function updateWallpaperSample() {
+  const { fit } = $('#wallpaper-form').elements;
+  $('.wallpaper-sample').dataset.fit = fit.value;
+  $('#wallpaper-fit-note').textContent = wallpaperFitNotes[fit.value];
+}
+
+function openWallpaperOptions() {
+  const preview = S.modal?.preview;
+  const dialog = $('#wallpaper-options');
+  if (!preview?.display || dialog.open) return;
+  const { width, height } = preview.display;
+  const sample = $('.wallpaper-sample');
+  const ratio = width / height;
+  sample.style.aspectRatio = ratio;
+  sample.style.width = `min(100%, ${Math.min(372, 210 * ratio)}px)`;
+  sample.style.setProperty('--wallpaper-center-width', `${100 * wallpaperImageSize(preview.image).width / width}%`);
+  $('img', sample).src = preview.image.src;
+  $('#wallpaper-form').reset();
+  $('#wallpaper-feedback').hidden = true;
+  updateWallpaperSample();
+  dialog.showModal();
+}
+
+async function setPreviewWallpaper(fit) {
+  const preview = S.modal?.preview;
+  const dialog = $('#wallpaper-options');
+  const apply = $('#wallpaper-apply');
+  const cancel = $('#wallpaper-cancel');
+  const choices = $('.wallpaper-modes');
+  const feedback = $('#wallpaper-feedback');
+  if (!preview?.display || !dialog.open || apply.disabled || !Object.hasOwn(wallpaperFitNotes, fit)) return;
+  apply.disabled = cancel.disabled = choices.disabled = true;
+  const active = () => S.modal?.preview === preview;
+  feedback.textContent = 'Setting desktop background…';
+  feedback.hidden = false;
+  try {
+    let jpeg;
+    try { jpeg = encodeWallpaper(preview.image); }
+    catch (error) {
+      if (error.name !== 'SecurityError') throw error;
+      const bytes = await window.api.artWallpaperSource(preview.image.src);
+      const bitmap = await createImageBitmap(new Blob([bytes]));
+      try { jpeg = encodeWallpaper(bitmap); } finally { bitmap.close(); }
+    }
+    if (!active()) return;
+    await window.api.artSetWallpaper(preview.kind, jpeg, fit);
+    if (active()) {
+      dialog.close();
+      artStatus('Desktop background set.');
+    }
+  } catch (error) {
+    if (active()) feedback.textContent = `Could not set desktop background: ${error.message || error}`;
+  } finally { apply.disabled = cancel.disabled = choices.disabled = false; }
 }
 
 async function loadArtTabs(more = false) {
   const m = S.modal;
   if (!m) return;
+  if (!more) {
+    if (m.preview) closeArtPreview();
+    m.previewReturn = null;
+    $('.thumbScroll').scrollTop = 0;
+  }
   if (m.tab === 'manage') { await renderArtManage(); return; }
   if (!S.cfg.api_key) {
     const kind = m.tab, appid = m.steamId;
@@ -2235,6 +2483,66 @@ async function stockArtwork(m, kind) {
   return m.stock[kind];
 }
 
+async function suggestArtwork(row, art, sgdbId, sgdbName) {
+  const desktop = row.source === 'desktop';
+  const kinds = desktop ? ['icon'] : ART_TABS.map(([kind]) => kind);
+  const missing = kinds.filter(kind => !art[kind] && !(desktop && row.iconChoice));
+  if (!missing.length) return null;
+  const payload = rowPayload(row);
+  if (!sgdbId) {
+    const { rows: [match] } = await window.api.matchAuto({ rows: [{ ...payload, query: row.query }], persist: false });
+    if (!match?.sgdbId) return null;
+    ({ sgdbId, sgdbName } = match);
+  }
+  const choices = await Promise.all(missing.map(async kind => {
+    if (desktop) {
+      const custom = desktopGameMembers(row).some(member => member.shortcut
+        && member.icon && folderKey(member.icon) !== folderKey(member.exe));
+      if (custom) return null;
+    } else {
+      const request = { row: payload, kind, existsOnly: true };
+      const current = await window.api.artCurrent(request);
+      if (current && (row.source !== 'steam'
+        || current.file !== (await window.api.artCurrent({ ...request, stock: true }))?.file)) return null;
+    }
+    const images = await window.api.artList({ sgdbId, kind, page: 0, filters: pickerFilters(kind, row) });
+    const image = images.find(item => item.url);
+    return image ? [kind, image] : null;
+  }));
+  const found = Object.fromEntries(choices.filter(Boolean));
+  return Object.keys(found).length ? { sgdbId, sgdbName, art: found } : null;
+}
+
+async function findArtworkForGame() {
+  const m = S.modal;
+  const button = $('#art-find-for-me');
+  if (!m || button.disabled || !S.cfg.api_key) return;
+  const id = m.sgdbId;
+  const key = S.cfg.api_key;
+  button.disabled = true;
+  artStatus('Finding artwork…');
+  try {
+    const result = await suggestArtwork(m.row, m.sel, id, m.row.sgdbName);
+    if (S.modal !== m || S.cfg.api_key !== key || (m.sgdbId !== id && result?.sgdbId !== m.sgdbId)) return;
+    if (!result) { artStatus('No missing artwork found.'); return; }
+    const additions = Object.keys(result.art).filter(kind => !m.sel[kind]);
+    if (!additions.length) return;
+    if (m.sgdbId !== result.sgdbId) m.search = (m.search || 0) + 1;
+    m.sgdbId = result.sgdbId;
+    m.keepName = true;
+    if (!m.games.some(game => game.id === result.sgdbId) && result.sgdbName) {
+      m.games.push({ id: result.sgdbId, name: result.sgdbName });
+    }
+    $('#art-id').value = result.sgdbId;
+    for (const kind of additions) m.sel[kind] = result.art[kind];
+    renderArtTabs();
+    await loadArtTabs();
+    if (S.modal === m) artStatus(`Found ${additions.length} artwork choice${additions.length === 1 ? '' : 's'}. Save to review.`);
+  } catch (error) {
+    if (S.modal === m) artStatus(`Artwork search failed: ${error.message || error}`);
+  } finally { if (S.modal === m) button.disabled = false; }
+}
+
 async function renderArtManage() {
   const m = S.modal;
   m.moreObserver?.disconnect();
@@ -2246,7 +2554,7 @@ async function renderArtManage() {
   await Promise.all(modalTabs().filter(([kind]) => kind !== 'manage').map(async ([kind, label]) => {
     const cell = document.createElement('div');
     cell.className = 'manage-artwork';
-    cell.innerHTML = `<strong>${label}</strong><div class="manage-preview"><img alt="${esc(label)}" hidden></div><span class="muted small">Loading…</span>
+    cell.innerHTML = `<strong>${label}</strong><div class="manage-preview"><button type="button" class="manage-preview-open" aria-label="View full ${esc(label.toLowerCase())} image" hidden><img alt=""></button></div><span class="muted small">Loading…</span>
       <div class="row"><button class="btn sm" data-manage="change">Change</button><button class="text-btn" data-manage="restore">${m.row.source === 'steam' || m.row.inSteam ? 'Restore default' : 'Clear selection'}</button></div>`;
     grid.appendChild(cell);
     $('[data-manage="change"]', cell).onclick = () => { m.tab = kind; renderArtTabs(); renderArtFilters(); loadArtTabs(); };
@@ -2267,8 +2575,10 @@ async function renderArtManage() {
       : choice && !choice.appliedFile ? 'Selected artwork' : current ? 'Current artwork' : 'No custom artwork';
     if (current) {
       const image = $('img', cell);
-      image.onload = () => { image.hidden = false; };
-      image.onerror = () => { image.hidden = true; $('span', cell).textContent = 'Preview could not load.'; };
+      const button = $('.manage-preview-open', cell);
+      image.onload = () => { button.hidden = false; };
+      image.onerror = () => { button.hidden = true; $('span', cell).textContent = 'Preview could not load.'; };
+      button.onclick = () => openArtPreview(current.file || current.url ? current : { url: image.src }, button, kind);
       image.src = current.thumb || current.url || await localArtPreview(current.file).catch(() => null) || '';
     }
   }));
@@ -2305,7 +2615,7 @@ async function renderArtChoice() {
 }
 
 function renderArtGrid(loading = false, start = 0) {
-  closeArtPreview();
+  if (!start) closeArtPreview();
   const m = S.modal;
   m?.moreObserver?.disconnect();
   const grid = $('#art-grid');
@@ -2393,7 +2703,7 @@ function artThumb(im, label = '', selection = im) {
     if (['art-choice', 'art-stock'].includes(cell.parentElement?.id)) cell.parentElement.hidden = true;
     if (S.modal === modal && modal.tab === kind) artStatus('An image could not load and was hidden. Details are in the log.');
   });
-  $('.thumb-select', cell).addEventListener('dblclick', handleAction('Artwork preview', () => openArtPreview(im)));
+  $('.thumb-select', cell).addEventListener('dblclick', e => openArtPreview(im, e.currentTarget, kind));
   return cell;
 }
 
@@ -2425,7 +2735,6 @@ async function artSearch(showMatches = false) {
     const sel = $('#art-games');
     const matches = $('#art-matches');
     matches.hidden = !showMatches || games.length < 2;
-    matches.open = !matches.hidden;
     sel.innerHTML = '';
     if (!games.length) { artStatus(S.cfg.api_key ? 'No SGDB matches. Try another query or paste an ID.' : 'No Steam matches. Try another search.'); return; }
     for (const g of games) {
@@ -2436,8 +2745,9 @@ async function artSearch(showMatches = false) {
       sel.appendChild(o);
     }
     const g = games.find((game) => game.id === (S.cfg.api_key ? m.sgdbId : m.steamId)) || games[0];
-    if (!S.cfg.api_key) { m.stock = {}; m.steamId = g.id; sel.value = String(g.id); await loadArtTabs(); return; }
     sel.value = String(g.id);
+    renderChoiceList(sel);
+    if (!S.cfg.api_key) { m.stock = {}; m.steamId = g.id; await loadArtTabs(); return; }
     m.sgdbId = g.id;
     $('#art-id').value = String(g.id);
     artStatus(`Matched '${g.name}' (${g.id}). Loading artwork…`);
@@ -2457,7 +2767,7 @@ async function artLoadId() {
     return;
   }
   if (gid === m.sgdbId) return;
-  $('#art-matches').open = false;
+  $('#art-matches').hidden = true;
   m.search = (m.search || 0) + 1;
   m.sgdbId = gid;
   await loadArtTabs();
@@ -2466,10 +2776,12 @@ async function artLoadId() {
 // ------------------------------------------------------------------ boot
 function wireToolbar() {
   renderSettingsCards();
+  $('#art-find-for-me').onclick = findArtworkForGame;
   document.addEventListener('click', event => {
-    for (const menu of $$('#preferences[open], #art-filters[open], #art-matches[open]')) {
+    for (const menu of $$('#preferences[open], #art-filters[open]')) {
       if (!menu.contains(event.target) && !(menu.id === 'preferences' && event.target.closest('[data-setup=key], #art-key-settings'))) menu.open = false;
     }
+    if (!$('#art-matches').contains(event.target)) $('#art-matches').hidden = true;
   });
   wireWorkspace();
   wireDesktop();
@@ -2503,7 +2815,7 @@ function wireToolbar() {
     if (row) openArtModal(row, e.target.closest('.game-open') ? 'grid' : 'manage');
     else selectRow(tr.dataset.key);
   });
-  $('#d-exe-pick').addEventListener('change', (e) => { e.target.title = e.target.value; });
+  $('#d-exe-pick').addEventListener('change', e => updateLauncherChoice(e.target));
   $('#d-browse').addEventListener('click', async () => {
     const r = steamEditorRow();
     const p = await window.api.filesPickExe(r ? (r.fromExecutableSearch ? r.startDir : r.folder) : null);
@@ -2516,7 +2828,7 @@ function wireToolbar() {
         pick.appendChild(o);
       }
       pick.value = p;
-      pick.title = p;
+      updateLauncherChoice(pick);
     }
   });
   $('#d-open').addEventListener('click', () => {
@@ -2550,15 +2862,23 @@ function wireToolbar() {
     clearTimeout(artIdTimer);
     artLoadId();
   });
-  $('#art-preview-back').addEventListener('click', closeArtPreview);
-  $('#art-preview-image').addEventListener('error', () => {
-    const item = S.modal?.previewItem;
-    const image = $('#art-preview-image');
-    if (!item) return;
-    log(`Artwork preview failed to load: ${item.file || (image.src.startsWith('data:') ? 'local image data' : image.src)}`);
-    if (item.url && image.getAttribute('src') !== item.url) { image.src = item.url; return; }
-    artStatus('Could not preview this image.');
-    closeArtPreview();
+  $('#art-view-full').addEventListener('click', e => openArtPreview(S.modal?.sel[S.modal.tab], e.currentTarget));
+  $('#art-preview-back').addEventListener('click', () => closeArtPreview(true));
+  wirePreviewZoom();
+  $('#art-preview-wallpaper').addEventListener('click', openWallpaperOptions);
+  const wallpaperForm = $('#wallpaper-form');
+  wallpaperForm.addEventListener('change', updateWallpaperSample);
+  wallpaperForm.addEventListener('submit', event => {
+    event.preventDefault();
+    setPreviewWallpaper(wallpaperForm.elements.fit.value);
+  });
+  const wallpaperOptions = $('#wallpaper-options');
+  $('#wallpaper-cancel').onclick = () => wallpaperOptions.close();
+  wallpaperOptions.addEventListener('cancel', event => {
+    if ($('#wallpaper-apply').disabled) event.preventDefault();
+  });
+  wallpaperOptions.addEventListener('close', () => {
+    if (!wallpaperOptions.open) $('.wallpaper-sample img').removeAttribute('src');
   });
   const artGames = $('#art-games');
   artGames.addEventListener('change', async (e) => {
@@ -2573,15 +2893,11 @@ function wireToolbar() {
     }
   });
   const dismissMatches = () => {
-    $('#art-matches').open = false;
-    $('#art-matches summary').focus();
+    $('#art-matches').hidden = true;
+    $('#art-search').focus();
   };
-  artGames.addEventListener('click', dismissMatches);
-  artGames.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      dismissMatches();
-    }
+  artGames.nextElementSibling.addEventListener('click', event => {
+    if (event.target.closest('button[data-index]')) dismissMatches();
   });
   $('#art-url').addEventListener('click', () => {
     $('#art-url-input').value = S.modal.sel[S.modal.tab]?.custom ? S.modal.sel[S.modal.tab].url || '' : '';
@@ -2645,31 +2961,27 @@ function wireToolbar() {
   document.addEventListener('keydown', (e) => {
     if (e.defaultPrevented) return;
     if (S.exePicker) return;
-    if (e.key === 'Escape') {
-      const menu = $$('#preferences[open], #art-filters[open], #art-matches[open]').at(-1);
-      if (menu) {
-        e.preventDefault();
-        menu.open = false;
-        $('summary', menu).focus({ preventScroll: true });
-        return;
-      }
-    }
+    if ($('#wallpaper-options').open) return;
+    if (e.key === 'Escape' && dismissTopPopup()) { e.preventDefault(); return; }
     if (S.modal && e.key === 'Tab') {
-      const focusable = $$('#art-modal button:not(:disabled), #art-modal input:not(:disabled), #art-modal select:not(:disabled), #art-modal summary')
-        .filter((element) => !element.closest('[hidden]') && element.getClientRects().length);
+      const focusable = $$('#art-modal button:not(:disabled), #art-modal input:not(:disabled), #art-modal select:not(:disabled), #art-modal summary, #art-modal .preview-image-wrap')
+        .filter((element) => element.tabIndex >= 0 && !element.closest('[hidden]') && element.getClientRects().length);
       const at = focusable.indexOf(document.activeElement);
       if (e.shiftKey && at <= 0) { e.preventDefault(); focusable.at(-1)?.focus(); }
       else if (!e.shiftKey && at === focusable.length - 1) { e.preventDefault(); focusable[0]?.focus(); }
     }
     if (e.key === 'Escape' && S.modal) {
       if (!$('#art-url-entry').hidden) $('#art-url-entry').hidden = true;
+      else if (S.modal.preview) closeArtPreview(true);
       else closeArtModal(false);
     }
-    if (e.altKey && e.key === 'ArrowLeft') moveReview('back');
-    if (e.altKey && e.key === 'ArrowRight') moveReview('fwd');
+    if (e.altKey && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+      moveNavigation(e.key === 'ArrowLeft' ? 'back' : 'fwd', 'key');
+    }
   });
   document.addEventListener('mouseup', event => {
-    if (event.button === 3 || event.button === 4) moveReview(event.button === 3 ? 'back' : 'fwd');
+    if (event.button === 3 || event.button === 4) moveNavigation(event.button === 3 ? 'back' : 'fwd', 'mouse');
   });
 }
 
@@ -2748,7 +3060,7 @@ async function boot() {
   try { await detectSteam(); }
   catch (error) { log(`Steam detection failed: ${error.message}`); }
   wireToolbar();
-  window.api.onNav(moveReview);
+  window.api.onNav(direction => moveNavigation(direction, 'app-command'));
   window.api.onProgress((p) => {
     setBar(p.current || 0, p.total || 0);
     if (p.label) status(p.label);
@@ -2780,15 +3092,29 @@ function wireWorkspace() {
   $('#close-steam-setup').onclick = () => { $('#steam-setup').close(); handleAction('Refresh Steam', doRefresh)(); };
   $('#steam-setup').addEventListener('cancel', () => handleAction('Refresh Steam', doRefresh)());
   const picker = $('#desktop-destination');
-  picker.onchange = handleAction('Change destination', async () => {
-    const destination = picker.value;
-    picker.disabled = true;
-    S.reviewReturn = null;
+  picker.onclick = event => {
+    const button = event.target.closest('[data-destination]');
+    if (!button || button.getAttribute('aria-pressed') === 'true' || picker.inert) return;
+    return handleAction('Change destination', async () => {
+      picker.inert = $('#center').inert = true;
+      S.artReturn = S.reviewReturn = null;
+      try {
+        await savePatch({ startup_library: button.dataset.destination });
+        await showLibrary(true);
+      } finally { picker.inert = $('#center').inert = false; button.focus({ preventScroll: true }); }
+    })();
+  };
+  const location = $('#shortcut-location');
+  location.onchange = handleAction('Change shortcut location', async () => {
+    const destination = location.value;
+    location.disabled = true;
     try {
-      await savePatch(destination === 'steam' ? { startup_library: 'steam' }
-        : { startup_library: 'desktop', desktop_destination: destination });
-      await showLibrary();
-    } finally { picker.disabled = false; }
+      await savePatch({ desktop_destination: destination });
+      S.artReturn = S.reviewReturn = null;
+    } finally {
+      location.value = S.cfg.desktop_destination || 'desktop';
+      renderDesktop();
+    }
   });
   for (const [id, depth] of [['add-single', 0], ['add-collection', 1]]) {
     $('#' + id).onclick = handleAction('Add games', async () => {
@@ -2848,12 +3174,22 @@ function renderReview() {
   const destination = desktop ? ({ desktop: 'Desktop', 'start-menu': 'Start menu', both: 'Desktop and Start menu' }[S.cfg.desktop_destination || 'desktop']) : 'Steam';
   $('#review-title').textContent = !review.savedCount
     ? desktop ? 'Create shortcuts' : 'Add to Steam' : 'Review changes';
-  $('#review-summary').textContent = `${review.included.size} of ${review.rows.length} games selected for ${destination}`;
+  const rowChecks = new Map();
+  const groupChecks = new Map();
+  const updateSelection = () => {
+    const total = review.rows.length;
+    $('#review-summary').textContent = `${review.included.size} of ${total} selected for ${destination}`;
+    $('#review-apply').disabled = !review.included.size;
+    for (const [check, rows] of groupChecks) {
+      const selected = rows.filter(row => review.included.has(row)).length;
+      check.checked = selected === rows.length;
+      check.indeterminate = selected > 0 && !check.checked;
+    }
+  };
   $('#review-note')?.remove();
   if (desktop) $('#page-review .library-head').insertAdjacentHTML('afterend', '<p id="review-note" class="note">Choose which shortcuts to create or update. Your game files are not changed.</p>');
   $('#review-apply').textContent = `Apply to ${destination}`;
-  $('#review-apply').disabled = !review.included.size;
-  $('#review-status').textContent = 'Nothing has been applied yet.';
+  $('#review-status').textContent = '';
   const host = $('#review-list');
   host.replaceChildren();
   for (const [index, row] of review.rows.entries()) {
@@ -2862,7 +3198,27 @@ function renderReview() {
       heading.className = 'review-section-title';
       heading.textContent = index < review.savedCount ? 'Saved changes'
         : desktop ? 'Create missing shortcuts' : 'Add missing shortcuts';
-      host.appendChild(heading);
+      const rows = index < review.savedCount ? review.rows.slice(0, review.savedCount) : review.rows.slice(index);
+      const sectionHead = document.createElement('div');
+      sectionHead.className = 'review-section-head';
+      sectionHead.append(heading);
+      if (rows.length > 1) {
+        const label = document.createElement('label');
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.setAttribute('aria-label', `Select all for ${heading.textContent.toLowerCase()}`);
+        check.onchange = () => {
+          for (const member of rows) {
+            if (check.checked) review.included.add(member); else review.included.delete(member);
+            rowChecks.get(member).checked = check.checked;
+          }
+          updateSelection();
+        };
+        label.append(check, 'Select all');
+        sectionHead.append(label);
+        groupChecks.set(check, rows);
+      }
+      host.append(sectionHead);
     }
     const label = document.createElement('label');
     label.className = 'review-row';
@@ -2870,11 +3226,13 @@ function renderReview() {
       : row.source === 'steam' ? 'Update artwork' : row.inSteam ? 'Update Steam shortcut' : 'Add to Steam';
     const art = Object.keys(row.art || {}).filter(kind => !row.art[kind].current);
     if (row.logoPosition !== undefined) art.push('logo position');
-    label.innerHTML = `<input type="checkbox" ${review.included.has(row) ? 'checked' : ''}><img class="review-cover" alt="" hidden><strong>${esc(row.display)}</strong><span>${action}${art.length ? ' · ' + art.map(kind => ({ grid: 'cover', wide: 'wide cover', hero: 'background', logo: 'logo', icon: 'icon' }[kind] || kind)).join(', ') : ''}</span>`;
-    label.querySelector('input').onchange = event => {
+    const artwork = art.map(kind => ({ grid: 'cover', wide: 'wide cover', hero: 'background' }[kind] || kind)).join(', ');
+    label.innerHTML = `<input type="checkbox" ${review.included.has(row) ? 'checked' : ''}><img class="review-cover" alt="" hidden><strong>${esc(row.display)}</strong><span>${action}${artwork ? `<small>${esc(artwork)}</small>` : ''}</span>`;
+    const check = label.querySelector('input');
+    rowChecks.set(row, check);
+    check.onchange = event => {
       if (event.target.checked) review.included.add(row); else review.included.delete(row);
-      $('#review-summary').textContent = `${review.included.size} of ${review.rows.length} games selected for ${destination}`;
-      $('#review-apply').disabled = !review.included.size;
+      updateSelection();
     };
     host.appendChild(label);
     const image = label.querySelector('img');
@@ -2884,6 +3242,7 @@ function renderReview() {
       image.src = src; image.hidden = false;
     }).catch(() => {});
   }
+  updateSelection();
 }
 function closeReview(remember = true) {
   if (!S.review) return;
@@ -2891,10 +3250,68 @@ function closeReview(remember = true) {
   S.review = null;
   $('#page-review').close();
 }
-function moveReview(direction) {
-  if (S.modal || S.exePicker || $('#library-intro').open || $('#page-add').open || $('#steam-setup').open || $('#page-review').inert) return;
-  if (direction === 'back' && S.review) closeReview();
-  if (direction === 'fwd' && S.reviewReturn === libraryView() && !S.review) openReview(S.reviewReturn);
+function dismissTopPopup() {
+  if (S.modal && !$('#art-matches').hidden) {
+    $('#art-matches').hidden = true;
+    $('#art-search').focus({ preventScroll: true });
+    return true;
+  }
+  const popup = $(S.modal ? '#art-filters[open]' : '#preferences[open]');
+  if (!popup) return false;
+  popup.open = false;
+  $('summary', popup).focus({ preventScroll: true });
+  return true;
+}
+
+let lastNavigation;
+function moveNavigation(direction, source) {
+  const time = performance.now();
+  if (lastNavigation?.direction === direction && lastNavigation.source !== source && time - lastNavigation.time < 100) return;
+  lastNavigation = { direction, source, time };
+  if ($('#wallpaper-options').open) {
+    if (direction === 'back' && !$('#wallpaper-apply').disabled) $('#wallpaper-options').close();
+    return;
+  }
+  if ($('#confirm-overlay') || $('#page-review').inert || $('#library-intro').open) return;
+  if (direction === 'back' && dismissTopPopup()) return;
+  const dialog = $('#exe-picker[open], #page-add[open], #steam-setup[open]');
+  if (dialog) {
+    if (direction === 'back') {
+      if (dialog.id === 'steam-setup') $('#close-steam-setup').click();
+      else dialog.close();
+    }
+    return;
+  }
+  const modal = S.modal;
+  if (modal) {
+    if (modal.applying) return;
+    if (direction === 'back') {
+      if (!$('#art-url-entry').hidden) $('#art-url-entry').hidden = true;
+      else if (modal.preview) closeArtPreview(true);
+      else {
+        S.artReturn = { row: modal.row, tab: modal.tab, preview: modal.previewReturn, scope: reviewScope(libraryView()) };
+        closeArtModal(false);
+      }
+    } else if (!modal.preview && modal.previewReturn) {
+      const { item, kind, trigger } = modal.previewReturn;
+      openArtPreview(item, trigger, kind);
+    }
+    return;
+  }
+  if (direction === 'back') {
+    if (S.review) closeReview();
+    return;
+  }
+  if (S.review) return;
+  const destination = libraryView();
+  const saved = S.artReturn;
+  if (saved?.scope === reviewScope(destination)
+    && (destination === 'desktop' ? desktopCards() : S.rows).includes(saved.row)) {
+    handleAction('Reopen artwork picker', async () => {
+      await openArtModal(saved.row, saved.tab);
+      if (S.modal?.row === saved.row) S.modal.previewReturn = saved.preview;
+    })();
+  } else if (S.reviewReturn === destination) openReview(destination);
 }
 function wireReview() {
   $('#review-back').onclick = () => closeReview();
