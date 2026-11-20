@@ -45,23 +45,12 @@ jobs:
             throw "Release tag must be v$version."
           }
 
-          $installer = Get-ChildItem -LiteralPath "dist" -Filter "*Setup*.exe" -File |
-            Where-Object { $_.Name -notmatch "uninstaller" } |
-            Select-Object -First 1
-          if ($null -eq $installer) {
-            throw "No installer was produced in dist."
-          }
-
-          $zip = Get-ChildItem -LiteralPath "dist" -Filter "*-win.zip" -File |
-            Select-Object -First 1
-          if ($null -eq $zip) {
-            throw "No portable zip was produced in dist."
-          }
-          $portable = Join-Path $zip.DirectoryName "Shammes $version portable.zip"
-          Move-Item -LiteralPath $zip.FullName -Destination $portable
+          $name = "Shammes-windows-x64-$version"
+          $installer = Get-Item -LiteralPath "dist/$name.exe" -ErrorAction Stop
+          $portable = Get-Item -LiteralPath "dist/$name.zip" -ErrorAction Stop
 
           "installer=$($installer.Name)" >> $env:GITHUB_OUTPUT
-          "portable=$([System.IO.Path]::GetFileName($portable))" >> $env:GITHUB_OUTPUT
+          "portable=$($portable.Name)" >> $env:GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:

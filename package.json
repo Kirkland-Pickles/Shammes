@@ -7,7 +7,7 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test \"test/*.test.js\"",
-    "build": "electron-builder --win --publish never"
+    "build": "electron-builder --win --x64 --publish never"
   },
   "devDependencies": {
     "electron": "44.3.0",
@@ -16,6 +16,7 @@
   "build": {
     "appId": "com.libshammes.app",
     "productName": "Shammes",
+    "artifactName": "${productName}-windows-${arch}-${version}.${ext}",
     "files": ["src/**/*", "package.json"],
     "extraFiles": ["LICENSE"],
     "directories": { "output": "dist" },

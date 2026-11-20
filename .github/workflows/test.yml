@@ -30,11 +30,12 @@ jobs:
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $commit = $env:GITHUB_SHA.Substring(0, 7)
-          $installer = "Shammes Setup $version-$commit.exe"
-          $portable = "Shammes $version-$commit portable.zip"
+          $name = "Shammes-windows-x64-$version"
+          $installer = "$name-$commit.exe"
+          $portable = "$name-$commit.zip"
 
-          Rename-Item -LiteralPath "dist/Shammes Setup $version.exe" -NewName $installer
-          Rename-Item -LiteralPath "dist/Shammes-$version-win.zip" -NewName $portable
+          Rename-Item -LiteralPath "dist/$name.exe" -NewName $installer
+          Rename-Item -LiteralPath "dist/$name.zip" -NewName $portable
 
           "installer=$installer" >> $env:GITHUB_OUTPUT
           "portable=$portable" >> $env:GITHUB_OUTPUT
