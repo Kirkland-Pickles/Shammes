@@ -2,17 +2,16 @@
 const { it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
 const steam = require('../src/main/steam');
 const store = require('../src/main/store');
 const { SGDBClient } = require('../src/main/sgdb');
+const tempDir = require('./fixtures/temp-dir');
 
 function main(t, metadata = {}, desktopOverrides = {}, steamOverrides = {}, save = () => {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'native-art-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const root = tempDir(t);
   const cfg = { ...structuredClone(store.DEFAULTS), steam_path: root, steam_user_id: '1' };
   const handlers = new Map();
   const calls = [];
@@ -335,12 +334,13 @@ it('updates managed Steam shortcuts without duplicates', async (t) => {
   assert.equal(writes, 1);
 });
 
-it('adds a shortcut with only the chosen artwork', async (t) => {
+it('adds a shortcut with only explicitly chosen artwork', async (t) => {
   let entries = [];
   const env = main(t, {}, {}, { loadEntries: () => entries, saveEntries: (_sp, _uid, list) => { entries = list; return null; } });
   const row = { source: 'folder', folder: 'C:/Games/Game', display: 'Game', exe: 'C:/Games/game.exe',
-    art: { grid: { url: 'https://test.invalid/chosen.jpg' } } };
-  const result = await env.invoke('steam:add', { rows: [row], kinds: ['grid', 'hero'] });
+    art: { grid: { url: 'https://test.invalid/chosen.jpg' },
+      hero: { url: 'https://test.invalid/suggested.jpg', automatic: true } } };
+  const result = await env.invoke('steam:add', { rows: [row], kinds: ['grid', 'hero', 'logo'] });
   assert.equal(result.added, 1);
   assert.equal(result.artworkSaved, 1);
   assert.equal(result.artworkFailed, 0);
@@ -349,6 +349,7 @@ it('adds a shortcut with only the chosen artwork', async (t) => {
   const stem = steam.gridStemFromEntry(entries[0]);
   assert.equal(fs.readFileSync(steam.artDest(env.grid, stem, 'grid', '.jpg'), 'utf8'), 'new artwork');
   assert.equal(fs.existsSync(steam.artDest(env.grid, stem, 'hero', '.jpg')), false);
+  assert.equal(fs.existsSync(steam.artDest(env.grid, stem, 'logo', '.jpg')), false);
   assert.equal(env.artworkQueries.length, 0);
 });
 
@@ -477,7 +478,7 @@ it('passes artwork pagination and filters to SGDB', async () => {
   await client.icons(7, { page: 2, limit: 30, types: 'static' });
 });
 
-it('passes selected tags and animation filters to SGDB', async t => {
+it('passes selected filters to SGDB and omits cleared sizes', async t => {
   const env = main(t);
   await env.invoke('art:list', { sgdbId: 7, kind: 'icon', filters: {
     static: false, animated: true, untagged: false, nsfw: true, humor: true, epilepsy: false,
@@ -490,14 +491,8 @@ it('passes selected tags and animation filters to SGDB', async t => {
   assert.equal(params.get('styles'), 'custom');
   assert.equal(params.get('mimes'), 'image/png');
   assert.equal(params.get('dimensions'), '256');
-});
-
-it('keeps cleared size filters instead of resetting them', async t => {
-  const env = main(t);
   await env.invoke('art:list', { sgdbId: 7, kind: 'grid', filters: { dimensions: [] } });
-  assert.equal(env.artworkQueries.at(-1).dimensions, '');
-  const params = new URLSearchParams(new SGDBClient('fixture').buildParams(env.artworkQueries.at(-1)));
-  assert.equal(params.has('dimensions'), false);
+  assert.equal(new URLSearchParams(new SGDBClient('fixture').buildParams(env.artworkQueries.at(-1))).has('dimensions'), false);
 });
 
 it('Purge restores original artwork after repeated replacements', async (t) => {
@@ -529,7 +524,7 @@ it('leaves later user artwork changes alone during Purge', async (t) => {
   assert.equal(fs.readFileSync(dest, 'utf8'), 'user replacement');
 });
 
-it('does not download earlier automatic choices', async t => {
+it('does not apply earlier automatic picks to a native game', async t => {
   const env = main(t);
   const result = await env.download(native({ grid: { url: 'https://test.invalid/grid.jpg', automatic: true } }));
   assert.equal(result.saved, 0);

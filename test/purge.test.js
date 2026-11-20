@@ -3,6 +3,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
+const tempDir = require('./fixtures/temp-dir');
 const path = require('path');
 const steam = require('../src/main/steam');
 const store = require('../src/main/store');
@@ -17,47 +18,43 @@ function fakeEntry(appid, name, tags) {
 }
 
 describe('planPurge', () => {
-  it('plans removal and undo, leaving changed files alone', () => {
-    const td = fs.mkdtempSync(path.join(os.tmpdir(), 'purge-'));
-    try {
-      const grid = path.join(td, 'grid');
-      fs.mkdirSync(grid, { recursive: true });
-      const ours = path.join(grid, '2000000001p.png');
-      const theirs = path.join(grid, '2000000002p.png');
-      fs.writeFileSync(ours, Buffer.alloc(100, 1));
-      fs.writeFileSync(theirs, Buffer.alloc(100, 2));
-      // Keep files changed after they were recorded.
-      const changed = path.join(grid, '2000000001_hero.png');
-      fs.writeFileSync(changed, Buffer.alloc(50, 9));
-      const entries = [
-        fakeEntry(-100, 'Ours', { 0: 'SGDB Manager' }),
-        fakeEntry(-200, 'Foreign', {}),
-      ];
-      // entry appids are signed; journal uses signed too
-      const changes = {
-        shortcuts: [{ appid: -100, appName: 'Ours' }],
-        fields: [{ appid: -200, field: 'AppName', before: 'Foreign Original' }],
-        files: [
-          { path: ours, size: 100, mtimeMs: fs.statSync(ours).mtimeMs },
-          { path: changed, size: 9999, mtimeMs: 0 },
-        ],
-      };
-      const sig = (p) => {
-        try {
-          const st = fs.statSync(p);
-          return { size: st.size, mtimeMs: st.mtimeMs };
-        } catch { return null; }
-      };
-      const plan = steam.planPurge(entries, changes, [grid], sig);
-      assert.deepEqual(plan.removeAppids, [-100]);
-      assert.deepEqual(plan.restoreFields, [{ appid: -200, field: 'AppName', before: 'Foreign Original' }]);
-      assert.ok(plan.deleteFiles.some((f) => f.path === ours));
-      assert.ok(!plan.deleteFiles.some((f) => f.path === theirs), 'never touch unjournaled files');
-      assert.ok(plan.skippedFiles.some((f) => f.path === changed), 'changed-by-user files are kept');
-      assert.ok(plan.names.includes('Ours'));
-    } finally {
-      fs.rmSync(td, { recursive: true, force: true });
-    }
+  it('plans removal and undo, leaving changed files alone', (t) => {
+    const td = tempDir(t);
+    const grid = path.join(td, 'grid');
+    fs.mkdirSync(grid, { recursive: true });
+    const ours = path.join(grid, '2000000001p.png');
+    const theirs = path.join(grid, '2000000002p.png');
+    fs.writeFileSync(ours, Buffer.alloc(100, 1));
+    fs.writeFileSync(theirs, Buffer.alloc(100, 2));
+    // Keep files changed after they were recorded.
+    const changed = path.join(grid, '2000000001_hero.png');
+    fs.writeFileSync(changed, Buffer.alloc(50, 9));
+    const entries = [
+      fakeEntry(-100, 'Ours', { 0: 'SGDB Manager' }),
+      fakeEntry(-200, 'Foreign', {}),
+    ];
+    // entry appids are signed; journal uses signed too
+    const changes = {
+      shortcuts: [{ appid: -100, appName: 'Ours' }],
+      fields: [{ appid: -200, field: 'AppName', before: 'Foreign Original' }],
+      files: [
+        { path: ours, size: 100, mtimeMs: fs.statSync(ours).mtimeMs },
+        { path: changed, size: 9999, mtimeMs: 0 },
+      ],
+    };
+    const sig = (p) => {
+      try {
+        const st = fs.statSync(p);
+        return { size: st.size, mtimeMs: st.mtimeMs };
+      } catch { return null; }
+    };
+    const plan = steam.planPurge(entries, changes, [grid], sig);
+    assert.deepEqual(plan.removeAppids, [-100]);
+    assert.deepEqual(plan.restoreFields, [{ appid: -200, field: 'AppName', before: 'Foreign Original' }]);
+    assert.ok(plan.deleteFiles.some((f) => f.path === ours));
+    assert.ok(!plan.deleteFiles.some((f) => f.path === theirs), 'never touch unjournaled files');
+    assert.ok(plan.skippedFiles.some((f) => f.path === changed), 'changed-by-user files are kept');
+    assert.ok(plan.names.includes('Ours'));
   });
 
   it('is empty when nothing was ever changed', () => {
@@ -69,34 +66,30 @@ describe('planPurge', () => {
 });
 
 describe('listInstalledGames', () => {
-  it('parses appmanifests across libraries, dedupes', () => {
-    const td = fs.mkdtempSync(path.join(os.tmpdir(), 'libs-'));
-    try {
-      const lib1 = path.join(td, 'Steam');
-      const lib2 = path.join(td, 'Lib2');
-      for (const [lib, id, name, dir] of [
-        [lib1, 10, 'First Game', 'first-game'],
-        [lib1, 20, 'Second Game', 'second-game'],
-        [lib2, 10, 'First Game', 'first-game'],
-      ]) {
-        fs.mkdirSync(path.join(lib, 'steamapps'), { recursive: true });
-        fs.writeFileSync(path.join(lib, 'steamapps', `appmanifest_${id}.acf`),
-          `"AppState"\n{\n\t"appid"\t\t"${id}"\n\t"name"\t\t"${name}"\n\t"installdir"\t\t"${dir}"\n}\n`);
-      }
-      const games = steam.listInstalledGames(lib1);
-      // lib2 exists but is not linked from lib1 yet.
-      assert.deepEqual(games.map((g) => g.name), ['First Game', 'Second Game']);
-      assert.ok(games[0].installdir.endsWith(path.join('common', 'first-game')));
-      // Link lib2. Duplicate app 10 should still appear once.
-      fs.writeFileSync(path.join(lib1, 'steamapps', 'libraryfolders.vdf'),
-        `"libraryfolders"\n{\n\t"0"\n\t{\n\t\t"path"\t\t"${lib1.replace(/\\/g, '\\\\')}"\n\t}\n`
-        + `\t"1"\n\t{\n\t\t"path"\t\t"${lib2.replace(/\\/g, '\\\\')}"\n\t}\n}\n`);
-      const merged = steam.listInstalledGames(lib1);
-      assert.equal(merged.length, 2);
-      assert.equal(merged.filter((g) => g.appid === 10).length, 1);
-    } finally {
-      fs.rmSync(td, { recursive: true, force: true });
+  it('parses appmanifests across libraries, dedupes', (t) => {
+    const td = tempDir(t);
+    const lib1 = path.join(td, 'Steam');
+    const lib2 = path.join(td, 'Lib2');
+    for (const [lib, id, name, dir] of [
+      [lib1, 10, 'First Game', 'first-game'],
+      [lib1, 20, 'Second Game', 'second-game'],
+      [lib2, 10, 'First Game', 'first-game'],
+    ]) {
+      fs.mkdirSync(path.join(lib, 'steamapps'), { recursive: true });
+      fs.writeFileSync(path.join(lib, 'steamapps', `appmanifest_${id}.acf`),
+        `"AppState"\n{\n\t"appid"\t\t"${id}"\n\t"name"\t\t"${name}"\n\t"installdir"\t\t"${dir}"\n}\n`);
     }
+    const games = steam.listInstalledGames(lib1);
+    // lib2 exists but is not linked from lib1 yet.
+    assert.deepEqual(games.map((g) => g.name), ['First Game', 'Second Game']);
+    assert.ok(games[0].installdir.endsWith(path.join('common', 'first-game')));
+    // Link lib2. Duplicate app 10 should still appear once.
+    fs.writeFileSync(path.join(lib1, 'steamapps', 'libraryfolders.vdf'),
+      `"libraryfolders"\n{\n\t"0"\n\t{\n\t\t"path"\t\t"${lib1.replace(/\\/g, '\\\\')}"\n\t}\n`
+      + `\t"1"\n\t{\n\t\t"path"\t\t"${lib2.replace(/\\/g, '\\\\')}"\n\t}\n}\n`);
+    const merged = steam.listInstalledGames(lib1);
+    assert.equal(merged.length, 2);
+    assert.equal(merged.filter((g) => g.appid === 10).length, 1);
   });
 });
 

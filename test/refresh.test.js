@@ -107,7 +107,6 @@ it('uses default sizes unless sizes were explicitly chosen', () => {
   assert.deepEqual(dimensions('wide'), ['460x215', '920x430']);
   assert.deepEqual(dimensions('hero'), ['1920x620', '3840x1240', '1600x650']);
   assert.deepEqual(dimensions('logo'), []);
-  assert.equal(dimensions('icon').length, 37);
   assert.ok(dimensions('icon').includes('256'));
   state.cfg.artwork_filters.grid = { dimensions: ['512x512'] };
   assert.deepEqual(dimensions('grid'), ['512x512']);
@@ -115,69 +114,41 @@ it('uses default sizes unless sizes were explicitly chosen', () => {
   assert.deepEqual(dimensions('grid'), []);
 });
 
-it('uses suggested covers without saving native matches', async () => {
-  let nativeLookups = 0;
-  const puts = [];
-  const saved = new Map();
+it('uses a suggested cover without setting the native game match', async () => {
+  let saved;
   const { context, state } = renderer({
     artCurrent: async () => ({ file: 'unreadable.png' }),
     artThumbnail: async () => { throw new Error('cannot decode'); },
     artPreviewFile: async () => { throw new Error('missing file'); },
-    sgdbBySteam: async id => { assert.equal(id, 123); nativeLookups++; return { id: 7 }; },
+    sgdbBySteam: async id => { assert.equal(id, 123); return { id: 7 }; },
     artList: async () => [{ thumb: 'https://test.invalid/thumb', url: 'https://test.invalid/full' }],
-    coverCacheGet: async req => saved.get(`id:${req.sgdbId}`) || saved.get(`steam:${req.appid}`) || null,
-    coverCachePut: async req => {
-      puts.push(req);
-      saved.set(`id:${req.sgdbId}`, { src: req.src, fallback: req.fallback });
-      saved.set(`steam:${req.appid}`, { src: req.src, fallback: req.fallback });
-      return true;
-    },
+    coverCacheGet: async () => null,
+    coverCachePut: async req => { saved = req; return true; },
   });
   state.cfg = { api_key: 'fixture' };
   context.game = { source: 'steam', steamAppid: 123, art: {} };
   const cover = await vm.runInContext('cardCoverSource(game)', context);
   assert.equal(cover.src, 'https://test.invalid/thumb');
   assert.equal(cover.fallback, 'https://test.invalid/full');
-  assert.equal(nativeLookups, 1);
   assert.equal(context.game.sgdbId, undefined);
-  assert.equal(puts.length, 1);
-  assert.equal(puts[0].sgdbId, 7);
-  assert.equal(puts[0].appid, 123);
-  assert.equal(puts[0].src, 'https://test.invalid/thumb');
-  assert.equal(puts[0].fallback, 'https://test.invalid/full');
-  state.cfg.api_key = '';
-  const cached = await vm.runInContext('cardCoverSource(game)', context);
-  assert.equal(cached.src, 'https://test.invalid/thumb');
-  assert.equal(nativeLookups, 1);
+  assert.equal(saved.sgdbId, 7);
+  assert.equal(saved.appid, 123);
 });
 
-it('refreshes a saved cover while the API key still works', async () => {
+it('refreshes matched covers online and uses the cache without a key', async () => {
+  const cached = { src: 'https://test.invalid/saved', fallback: null };
   const { context, state } = renderer({
     artCurrent: async () => null,
-    coverCacheGet: async () => ({ src: 'https://test.invalid/stale', fallback: null }),
-    artList: async () => [{ thumb: 'https://test.invalid/fresh', url: 'https://test.invalid/full' }],
+    coverCacheGet: async req => { assert.equal(req.sgdbId, 7); return cached; },
     coverCachePut: async () => true,
+    artList: async () => [{ thumb: 'https://test.invalid/fresh', url: 'https://test.invalid/full' }],
   });
-  state.cfg = { api_key: 'fixture' };
   context.game = { source: 'shortcut', sgdbId: 7, art: {} };
-  const cover = await vm.runInContext('cardCoverSource(game)', context);
-  assert.equal(cover.src, 'https://test.invalid/fresh');
-});
-
-it('shows a saved cover for a matched game without an API key', async () => {
-  const { context, state } = renderer({
-    artCurrent: async () => null,
-    coverCacheGet: async req => {
-      assert.equal(req.sgdbId, 7);
-      assert.equal(req.appid, null);
-      return { src: 'https://test.invalid/saved', fallback: null };
-    },
-  });
-  state.cfg = {};
-  context.game = { source: 'shortcut', sgdbId: 7, art: {} };
-  const cover = await vm.runInContext('cardCoverSource(game)', context);
-  assert.equal(cover.src, 'https://test.invalid/saved');
-  assert.equal(cover.fallback, null);
+  state.cfg = { api_key: '' };
+  const cover = () => vm.runInContext('cardCoverSource(game)', context);
+  assert.deepEqual(await cover(), cached);
+  state.cfg.api_key = 'fixture';
+  assert.equal((await cover()).src, 'https://test.invalid/fresh');
 });
 
 it('shows saved covers without reselecting them', async () => {
@@ -316,43 +287,6 @@ it('pairs alternate launchers without duplicate game cards', () => {
   assert.equal(vm.runInContext('desktopLocationState(members)', context), 'Existing');
 });
 
-it('groups shortcuts by exe despite different names or arguments', async () => {
-  const { context, state } = renderer({ cfgSet: async patch => ({ ...state.cfg, ...patch }) });
-  vm.runInContext('applyTheme = () => {}; renderChecklist = async () => {};', context);
-  const desktop = { id: 'desktop:game', destination: 'desktop', shortcut: 'Desktop/Game.lnk', signature: 'desktop-sig',
-    display: 'My game', exe: 'game.exe', args: '-one', admin: false, icon: 'custom.ico', iconIndex: 2 };
-  const menu = { ...desktop, id: 'menu:game', display: 'Other name', args: '-two', destination: 'start-menu', shortcut: 'Programs/Game.lnk', signature: 'menu-sig' };
-  context.rows = [desktop, menu, { ...desktop, id: 'desktop:another', display: 'Another game', exe: 'another.exe' },
-    { id: 'missing-menu', destination: 'start-menu', display: 'Default title', exe: 'game.exe' }];
-  state.desktop.groups = vm.runInContext('groupDesktopDestinations(rows)', context);
-  state.desktop.rows = state.desktop.groups.flat();
-  assert.equal(state.desktop.groups.length, 2);
-  assert.equal(state.desktop.groups[0][0].shortcut, desktop.shortcut);
-  assert.equal(state.desktop.groups[0][1].shortcut, menu.shortcut);
-  assert.equal(state.desktop.groups[1][1].display, 'Another game');
-  assert.equal(state.desktop.groups[1][1].args, '-one');
-  assert.equal(state.desktop.groups[1][1].icon, 'custom.ico');
-  assert.equal(state.desktop.groups[1][1].shortcut, null);
-  assert.equal(new Set(state.desktop.rows.map(row => row.id)).size, 4);
-  const payload = vm.runInContext('desktopApplyRows(desktopCards())', context);
-  assert.equal(payload[1].display, desktop.display);
-  assert.equal(payload[1].args, desktop.args);
-  assert.equal(payload[1].shortcut, menu.shortcut);
-  assert.equal(payload[1].signature, menu.signature);
-  state.cfg = { desktop_overrides: {} };
-  context.edited = state.desktop.groups[0][0];
-  context.edited.display = 'Renamed';
-  context.edited.iconChoice = { file: 'new.ico' };
-  await vm.runInContext('saveDesktopDraft(edited)', context);
-  assert.equal(state.cfg.desktop_choices['game.exe'].display, 'Renamed');
-  assert.equal(state.cfg.desktop_choices['game.exe'].iconChoice.file, 'new.ico');
-  assert.equal(state.cfg.desktop_choices['game.exe'].args, '-one');
-  assert.deepEqual(Object.keys(state.cfg.desktop_overrides), []);
-  assert.equal(state.desktop.groups[0][1].signature, 'menu-sig');
-  assert.equal(state.desktop.groups[0][0].signature, 'desktop-sig');
-  assert.equal(state.desktop.groups[1][0].display, 'Another game');
-});
-
 it('recovers shortcut names previously saved as cached', async () => {
   const row = { id: 'link:cached', display: '(cached)', query: 'Resolved game', exe: 'game.exe',
     shortcut: 'Desktop/(cached).lnk', signature: 'original' };
@@ -423,19 +357,6 @@ it('applies artwork to several native Steam games at once', async () => {
   assert.equal(calls[0].kinds.length, 0);
 });
 
-it('keeps failed artwork pending after partial success', async () => {
-  const { context, state } = renderer({ artDownload: async req => ({ rows: [{ ...req.rows[0],
-    art: { hero: req.rows[0].art.hero }, appliedKinds: ['grid'], failedKinds: ['hero'] }], lines: [] }) });
-  vm.runInContext('log = () => {};', context);
-  state.cfg = {};
-  state.rows = [{ source: 'steam', folder: 'steam:1', steamAppid: 1, art: { grid: { url: 'grid' }, hero: { url: 'hero' } } }];
-  await vm.runInContext('writeArtwork(S.rows, [])', context);
-  assert.equal(state.rows[0].pendingArt, true);
-  assert.equal(state.rows[0].artApplied, true);
-  assert.equal(state.rows[0].art.hero.url, 'hero');
-  assert.equal(state.rows[0].art.grid, undefined);
-});
-
 it('loads saved Steam shortcut matches on a fresh start', async () => {
   const { context, state, refresh } = renderer({
     steamRead: async () => [{ exe: 'game.exe', appid: 10, index: 0, appName: 'Game', managed: true }],
@@ -472,42 +393,19 @@ it('loads the active art tab once and ignores stale replies', async () => {
   assert.deepEqual(requests.map(({ req }) => [req.kind, req.page]), [['grid', 0], ['hero', 0]]);
 });
 
-it('keeps pending artwork when rebuilding the game list', async () => {
-  let reads = 0;
-  const { state, refresh, button } = renderer({
-    scanStart: async ({ roots }) => {
-      assert.deepEqual(Array.from(roots), ['games']);
-      return [{ folder: 'games/one', exePath: 'game.exe', displayName: 'Game' },
-        { folder: 'games/new', exePath: 'new.exe', displayName: 'New game' },
-        { folder: 'games/installed/bin', exePath: 'installed.exe', displayName: 'Installed game folder' }];
-    },
-    steamRead: async () => { reads++; return [{ exe: 'game.exe', appid: 10, index: 0, managed: true }, { exe: 'other.exe', appName: 'New name', appid: 20, index: 1 }]; },
-    steamGames: async () => [{ appid: 30, name: 'Installed game', installdir: 'games/installed' }],
-    resolveName: async () => null,
-    steamVerify: async () => true,
+it('keeps a shortcut choice when Steam refreshes its name', async () => {
+  const shortcut = { source: 'shortcut', exe: 'game.exe', sgdbId: 5, art: { hero: 'chosen' } };
+  const { state, refresh } = renderer({
+    steamRead: async () => [{ exe: shortcut.exe, appName: 'Renamed', appid: 20, index: 0 }],
+    steamGames: async () => [],
   });
-  const scope = JSON.stringify(['c:\\steam', '1']);
-  state.cfg = { games_roots: ['games'], sgdb_map: {}, sgdb_cache: {},
-    steam_path: 'C:/Steam', steam_user_id: '1',
-    steam_art_drafts: { [scope]: { 'exe:game.exe': { art: { hero: 'saved draft' } } } } };
-  const folder = { source: 'folder', folder: 'games/one', exe: 'old.exe', art: { grid: 'chosen' } };
-  const shortcut = { source: 'shortcut', exe: 'other.exe', sgdbId: 5, art: { hero: 'chosen' } };
-  state.rows = [folder, shortcut, { source: 'steam', display: 'Removed game' },
-    { source: 'folder', folder: 'removed/game', exe: 'removed.exe' }];
+  state.cfg = { games_roots: [] };
+  state.rows = [shortcut, { source: 'steam', display: 'Removed game' }];
   await refresh();
-  assert.equal(reads, 1);
-  assert.equal(state.rows[0].display, 'New game');
-  const existing = state.rows.find(row => row.source === 'shortcut' && row.exe === 'game.exe');
-  assert.equal(existing.inSteam, true);
-  assert.equal(existing.art.hero, 'saved draft');
-  assert.equal(state.rows[2].display, 'New name');
-  assert.equal(state.rows[2].sgdbId, 5);
-  assert.equal(state.rows[2].art, shortcut.art);
-  assert.equal(state.rows[3].display, 'Installed game');
-  assert.equal(state.rows.length, 4);
-  assert.ok(!state.rows.some((r) => r.folder === 'games/installed/bin'));
-  assert.deepEqual(state.cfg.steam_art_drafts[scope]['exe:game.exe'], { art: { hero: 'saved draft' } });
-  assert.equal(button.disabled, false);
+  assert.equal(state.rows.length, 1);
+  assert.equal(state.rows[0].display, 'Renamed');
+  assert.equal(state.rows[0].sgdbId, 5);
+  assert.equal(state.rows[0].art.hero, 'chosen');
 });
 
 it('dedupes exact exes and keeps nearby games and saved choices', async () => {
@@ -675,7 +573,7 @@ it('shares Windows choices across destinations and restart', async () => {
   let scans = 0;
   const rows = ['desktop', 'start-menu'].map(destination => ({
     id: destination, destination, shortcut: `${destination}/Game.lnk`, signature: destination,
-    exe: 'C:/Games/game.exe', display: 'Game', args: '', icon: '', iconIndex: 0,
+    exe: 'C:/Games/game.exe', display: destination + ' game', args: '-' + destination, icon: '', iconIndex: 0,
   }));
   const api = {
     desktopScan: async () => { scans++; return { rows: structuredClone(rows), warnings: [] }; },

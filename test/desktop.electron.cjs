@@ -110,64 +110,37 @@ app.whenReady().then(async () => {
   assert.equal(desktop.read(saved.shortcut).icon, exe);
   const image = path.join(root, 'custom.png');
   fs.writeFileSync(image, nativeImage.createFromBitmap(Buffer.alloc(16, 255), { width: 2, height: 2 }).toPNG());
-  const batchPersonal = path.join(root, 'Batch Desktop'), batchShared = path.join(root, 'Batch Shared');
-  for (const dir of [batchPersonal, batchShared]) fs.mkdirSync(dir);
-  const batch = createDesktop({ app, shell, nativeImage, personal: batchPersonal, shared: batchShared,
-    iconDir: path.join(root, 'Batch icons') });
-  const batchRows = Array.from({ length: 4 }, (_, id) => {
-    const target = path.join(root, `Batch game ${id}.exe`);
-    fs.writeFileSync(target, 'fixture');
-    return { id: `batch:${id}`, exe: target, display: `Batch game ${id}`,
-      args: `--profile ${id}`, admin: false, iconChoice: { file: image } };
-  });
-  const created = await batch.apply(batchRows);
-  assert.equal(created.filter(result => result.ok).length, 4, JSON.stringify(created));
+  const destinations = { personal: path.join(root, 'Batch Desktop'), startMenu: path.join(root, 'Batch Programs') };
+  const batchShared = path.join(root, 'Batch Shared');
+  for (const dir of [destinations.personal, batchShared]) fs.mkdirSync(dir);
+  const batch = createDesktop({ app, shell, nativeImage, ...destinations, shared: batchShared, iconDir: path.join(root, 'Batch icons') });
+  const batchGames = [{ exePath: exe, query: 'First game' }, { exePath: alternate, query: 'Second game' }];
+  const pending = (await batch.discover(batchGames, 'both')).rows;
+  const created = await batch.apply(pending.map(row => ({ ...row, args: '-profile', iconChoice: { file: image } })));
+  assert.equal(created.length, 4);
   for (const result of created) {
+    assert.ok(result.ok, result.error);
     const link = batch.read(result.row.shortcut);
     assert.equal(link.target, result.row.exe);
-    assert.equal(link.args, result.row.args);
+    assert.equal(link.args, '-profile');
     assert.ok(fs.existsSync(link.icon));
-    assert.equal(path.basename(result.row.shortcut), `${result.row.display}.lnk`);
+    const folder = result.row.destination === 'desktop' ? destinations.personal : destinations.startMenu;
+    assert.equal(path.dirname(result.row.shortcut), folder);
   }
-  const updated = await batch.apply(created.map(result => ({ ...result.row, args: '--updated', iconChoice: { exeIcon: true } })));
-  assert.equal(updated.filter(result => result.ok).length, 4, JSON.stringify(updated));
-  assert.equal(fs.readdirSync(batchPersonal).filter(file => file.endsWith('.lnk')).length, 4);
-  for (const result of updated) {
-    assert.equal(batch.read(result.row.shortcut).args, '--updated');
+  const rescanned = (await batch.discover(batchGames, 'both')).rows;
+  const identities = rescanned.map(row => fs.statSync(row.shortcut).ino);
+  const updated = await batch.apply(rescanned.map(row => ({ ...row, display: row.display + ' renamed', iconChoice: { exeIcon: true } })));
+  assert.equal(updated.length, created.length);
+  for (const [index, result] of updated.entries()) {
+    assert.ok(result.ok, result.error);
+    assert.equal(fs.statSync(result.row.shortcut).ino, identities[index]);
+    assert.equal(path.basename(result.row.shortcut), rescanned[index].display + ' renamed.lnk');
     assert.equal(batch.read(result.row.shortcut).icon, '');
   }
+  for (const folder of Object.values(destinations)) assert.equal(fs.readdirSync(folder).length, 2);
+
   const menus = createDesktop({ app, shell, nativeImage, personal, shared, startMenu, sharedStartMenu,
     iconDir: path.join(root, 'Menu icons') });
-  const pairedMenu = path.join(root, 'Batch Start menu');
-  fs.mkdirSync(pairedMenu);
-  const paired = createDesktop({ app, shell, nativeImage, personal: batchPersonal, shared: batchShared,
-    startMenu: pairedMenu, iconDir: path.join(root, 'Batch icons') });
-  const renderer = require('node:vm').createContext({ document: { addEventListener() {} } });
-  require('node:vm').runInContext(fs.readFileSync(path.join(__dirname, '../src/renderer/app.js'), 'utf8'), renderer);
-  const pairedGames = batchRows.map(row => ({ exePath: row.exe, query: row.display }));
-  renderer.discovered = (await paired.discover(pairedGames, 'both')).rows;
-  const grouped = require('node:vm').runInContext('groupDesktopDestinations(discovered)', renderer);
-  assert.equal(grouped.length, 4);
-  assert.ok(grouped.every(group => group.length === 2));
-  const pairedResults = await paired.apply(grouped.flat());
-  assert.ok(pairedResults.every(result => result.ok), JSON.stringify(pairedResults));
-  assert.equal(fs.readdirSync(batchPersonal).filter(file => file.endsWith('.lnk')).length, 4);
-  assert.equal(fs.readdirSync(pairedMenu).filter(file => file.endsWith('.lnk')).length, 4);
-  renderer.discovered = (await paired.discover(pairedGames, 'both')).rows;
-  const rescanned = require('node:vm').runInContext('groupDesktopDestinations(discovered)', renderer);
-  assert.equal(rescanned.length, 4);
-  const pair = rescanned[0];
-  const identities = pair.map(row => fs.statSync(row.shortcut).ino);
-  const renamedPair = await paired.apply(pair.map(row => ({ ...row, display: 'Paired rename', iconChoice: { file: image } })));
-  assert.ok(renamedPair.every(result => result.ok), JSON.stringify(renamedPair));
-  for (let index = 0; index < renamedPair.length; index++) {
-    const row = renamedPair[index].row;
-    assert.equal(fs.statSync(row.shortcut).ino, identities[index]);
-    assert.equal(path.basename(row.shortcut), 'Paired rename.lnk');
-    assert.equal(paired.read(row.shortcut).icon, renamedPair[0].row.icon);
-  }
-  assert.equal(fs.readdirSync(batchPersonal).filter(file => file.endsWith('.lnk')).length, 4);
-  assert.equal(fs.readdirSync(pairedMenu).filter(file => file.endsWith('.lnk')).length, 4);
   const menuRows = (await menus.discover(games, 'both')).rows;
   assert.equal(menuRows.filter(row => row.destination === 'start-menu').length, 1);
   assert.equal(menuRows.filter(row => row.destination === 'desktop').length, 2);

@@ -3,7 +3,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
-const os = require('os');
+const tempDir = require('./fixtures/temp-dir');
 const path = require('path');
 const vdf = require('../src/main/vdf');
 const steam = require('../src/main/steam');
@@ -125,55 +125,41 @@ describe('vdf codec', () => {
     assert.equal(entries[1].AppName, 'Second');
   });
 
-  it('never overwrites a backup made in the same instant', () => {
-    const td = fs.mkdtempSync(path.join(os.tmpdir(), 'backup-'));
+  it('never overwrites a backup made in the same instant', (t) => {
+    const td = tempDir(t);
     const sp = path.join(td, 'Steam');
     const uid = '1';
     const file = steam.shortcutsPath(sp, uid);
-    try {
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, 'first');
-      const first = steam.backupShortcuts(sp, uid);
-      fs.writeFileSync(file, 'second');
-      const second = steam.backupShortcuts(sp, uid);
-      assert.notEqual(first, second);
-      assert.equal(fs.readFileSync(first, 'utf8'), 'first');
-      assert.equal(fs.readFileSync(second, 'utf8'), 'second');
-    } finally {
-      fs.rmSync(td, { recursive: true, force: true });
-    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, 'first');
+    const first = steam.backupShortcuts(sp, uid);
+    fs.writeFileSync(file, 'second');
+    const second = steam.backupShortcuts(sp, uid);
+    assert.notEqual(first, second);
+    assert.equal(fs.readFileSync(first, 'utf8'), 'first');
+    assert.equal(fs.readFileSync(second, 'utf8'), 'second');
   });
 
-  it('does not write when an existing shortcut backup fails', () => {
-    const td = fs.mkdtempSync(path.join(os.tmpdir(), 'backup-fail-'));
+  it('does not write when an existing shortcut backup fails', (t) => {
+    const td = tempDir(t);
     const sp = path.join(td, 'Steam');
     const uid = '1';
     const file = steam.shortcutsPath(sp, uid);
-    const copy = fs.copyFileSync;
-    try {
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, 'original');
-      fs.copyFileSync = () => { throw new Error('blocked'); };
-      assert.throws(() => steam.saveEntries(sp, uid, []), /Cannot back up shortcuts\.vdf/);
-      assert.equal(fs.readFileSync(file, 'utf8'), 'original');
-    } finally {
-      fs.copyFileSync = copy;
-      fs.rmSync(td, { recursive: true, force: true });
-    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, 'original');
+    t.mock.method(fs, 'copyFileSync', () => { throw new Error('blocked'); });
+    assert.throws(() => steam.saveEntries(sp, uid, []), /Cannot back up shortcuts\.vdf/);
+    assert.equal(fs.readFileSync(file, 'utf8'), 'original');
   });
 
-  it('round-trips through a real file', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdf-'));
+  it('round-trips through a real file', (t) => {
+    const dir = tempDir(t);
     const file = path.join(dir, 'shortcuts.vdf');
-    try {
-      const e = steam.buildEntry({ appName: 'X', exePath: 'C:\\X\\x.exe', startDir: 'C:\\X' });
-      vdf.saveShortcuts(file, [e]);
-      const back = vdf.loadShortcuts(file);
-      assert.equal(back.length, 1);
-      assert.equal(back[0].AppName, 'X');
-      assert.equal(fs.readdirSync(dir).filter((f) => f.endsWith('.tmp')).length, 0);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+    const e = steam.buildEntry({ appName: 'X', exePath: 'C:\\X\\x.exe', startDir: 'C:\\X' });
+    vdf.saveShortcuts(file, [e]);
+    const back = vdf.loadShortcuts(file);
+    assert.equal(back.length, 1);
+    assert.equal(back[0].AppName, 'X');
+    assert.equal(fs.readdirSync(dir).filter((f) => f.endsWith('.tmp')).length, 0);
   });
 });

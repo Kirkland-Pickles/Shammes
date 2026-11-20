@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const resolve = require('../src/main/resolve');
 const scanner = require('../src/main/scanner');
 const fs = require('fs');
-const os = require('os');
+const tempDir = require('./fixtures/temp-dir');
 const path = require('path');
 
 describe('resolve', () => {
@@ -141,34 +141,26 @@ describe('scanner', () => {
     fs.closeSync(fh);
   }
 
-  it('picks the real exe and lists every candidate', () => {
-    const td = fs.mkdtempSync(path.join(os.tmpdir(), 'scan-'));
-    try {
-      touch(path.join(td, 'Sample Title', 'sampletitle.exe'), 60_000_000);
-      touch(path.join(td, 'Sample Title', 'uninstall.exe'), 1_000_000);
-      const games = scanner.scanGames(td, { maxDepth: 1 });
-      assert.equal(games.length, 1);
-      assert.equal(path.basename(games[0].exePath), 'sampletitle.exe');
-      assert.equal(games[0].displayName, 'Sample Title');
-      assert.equal(games[0].steamAppid, null);
-      assert.ok(games[0].candidates.length >= 2, 'dropdown must list every exe');
-    } finally {
-      fs.rmSync(td, { recursive: true, force: true });
-    }
+  it('picks the real exe and lists every candidate', (t) => {
+    const td = tempDir(t);
+    touch(path.join(td, 'Sample Title', 'sampletitle.exe'), 60_000_000);
+    touch(path.join(td, 'Sample Title', 'uninstall.exe'), 1_000_000);
+    const games = scanner.scanGames(td, { maxDepth: 1 });
+    assert.equal(games.length, 1);
+    assert.equal(path.basename(games[0].exePath), 'sampletitle.exe');
+    assert.equal(games[0].displayName, 'Sample Title');
+    assert.equal(games[0].steamAppid, null);
+    assert.ok(games[0].candidates.length >= 2, 'dropdown must list every exe');
   });
 
-  it('prefers the exe name when the folder name is garbage', () => {
-    const td = fs.mkdtempSync(path.join(os.tmpdir(), 'scan-'));
-    try {
-      touch(path.join(td, '98274923749879', 'Sample.Game.Title-RUNE.exe'), 60_000_000);
-      const games = scanner.scanGames(td, { maxDepth: 1 });
-      assert.equal(games.length, 1);
-      assert.equal(games[0].displayName, 'Sample Game Title');
-      assert.equal(games[0].query, 'Sample Game Title');
-      assert.equal(games[0].idMethod, 'folder');
-    } finally {
-      fs.rmSync(td, { recursive: true, force: true });
-    }
+  it('prefers the exe name when the folder name is garbage', (t) => {
+    const td = tempDir(t);
+    touch(path.join(td, '98274923749879', 'Sample.Game.Title-RUNE.exe'), 60_000_000);
+    const games = scanner.scanGames(td, { maxDepth: 1 });
+    assert.equal(games.length, 1);
+    assert.equal(games[0].displayName, 'Sample Game Title');
+    assert.equal(games[0].query, 'Sample Game Title');
+    assert.equal(games[0].idMethod, 'folder');
   });
 
   it('resolves exe stems with scene suffixes via the tables', () => {
@@ -177,26 +169,22 @@ describe('scanner', () => {
     assert.equal(resolve.resolveExeStem('Sample.Game.Title-RUNE'), null);
   });
 
-  it('handles publisher layout and finds buried executables', () => {
-    const td = fs.mkdtempSync(path.join(os.tmpdir(), 'scan-'));
-    try {
-      touch(path.join(td, 'Publisher', 'GameA', 'gamea.exe'), 10_000_000);
-      touch(path.join(td, 'Publisher', 'GameB', 'gameb.exe'), 20_000_000);
-      touch(path.join(td, 'Pub', 'Deep', 'd1', 'd2', 'd3', 'd4', 'deep.exe'), 20_000_000);
-      const games = scanner.scanGames(td, { maxDepth: 2 });
-      const names = new Set(games.map((g) => path.basename(g.folder)));
-      assert.ok(names.has('GameA') && names.has('GameB'), [...names].join(','));
-      const deep = games.find((g) => path.basename(g.folder) === 'Deep');
-      assert.ok(deep && deep.exePath === null, 'buried exe must be missed by folder pass');
-      const claimed = new Set();
-      for (const g of games) {
-        if (g.exePath) claimed.add(g.exePath);
-        for (const c of g.candidates) claimed.add(c.path);
-      }
-      const found = scanner.findExecutables(td, claimed);
-      assert.ok(found.games.some((g) => path.basename(g.exePath) === 'deep.exe'), 'executable search must find it');
-    } finally {
-      fs.rmSync(td, { recursive: true, force: true });
+  it('handles publisher layout and finds buried executables', (t) => {
+    const td = tempDir(t);
+    touch(path.join(td, 'Publisher', 'GameA', 'gamea.exe'), 10_000_000);
+    touch(path.join(td, 'Publisher', 'GameB', 'gameb.exe'), 20_000_000);
+    touch(path.join(td, 'Pub', 'Deep', 'd1', 'd2', 'd3', 'd4', 'deep.exe'), 20_000_000);
+    const games = scanner.scanGames(td, { maxDepth: 2 });
+    const names = new Set(games.map((g) => path.basename(g.folder)));
+    assert.ok(names.has('GameA') && names.has('GameB'), [...names].join(','));
+    const deep = games.find((g) => path.basename(g.folder) === 'Deep');
+    assert.ok(deep && deep.exePath === null, 'buried exe must be missed by folder pass');
+    const claimed = new Set();
+    for (const g of games) {
+      if (g.exePath) claimed.add(g.exePath);
+      for (const c of g.candidates) claimed.add(c.path);
     }
+    const found = scanner.findExecutables(td, claimed);
+    assert.ok(found.games.some((g) => path.basename(g.exePath) === 'deep.exe'), 'executable search must find it');
   });
 });
