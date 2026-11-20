@@ -2494,7 +2494,7 @@ async function suggestArtwork(row, art, sgdbId, sgdbName) {
     if (!match?.sgdbId) return null;
     ({ sgdbId, sgdbName } = match);
   }
-  const choices = await Promise.all(missing.map(async kind => {
+  const choices = await Promise.allSettled(missing.map(async kind => {
     if (desktop) {
       const custom = desktopGameMembers(row).some(member => member.shortcut
         && member.icon && folderKey(member.icon) !== folderKey(member.exe));
@@ -2506,11 +2506,16 @@ async function suggestArtwork(row, art, sgdbId, sgdbName) {
         || current.file !== (await window.api.artCurrent({ ...request, stock: true }))?.file)) return null;
     }
     const images = await window.api.artList({ sgdbId, kind, page: 0, filters: pickerFilters(kind, row) });
-    const image = images.find(item => item.url);
-    return image ? [kind, image] : null;
+    return images.find(item => item.url);
   }));
-  const found = Object.fromEntries(choices.filter(Boolean));
-  return Object.keys(found).length ? { sgdbId, sgdbName, art: found } : null;
+  const found = {};
+  const failed = [];
+  choices.forEach((choice, index) => {
+    const kind = missing[index];
+    if (choice.status === 'rejected') failed.push(kind);
+    else if (choice.value) found[kind] = choice.value;
+  });
+  return failed.length || Object.keys(found).length ? { sgdbId, sgdbName, art: found, failed } : null;
 }
 
 async function findArtworkForGame() {
@@ -2527,8 +2532,13 @@ async function findArtworkForGame() {
     if (S.modal !== m || S.cfg.api_key !== key || m.search !== search
       || (m.sgdbId !== id && result?.sgdbId !== m.sgdbId)) return;
     if (!result) { artStatus('No missing artwork found.'); return; }
+    const failed = ART_TABS.filter(([kind]) => result.failed.includes(kind)).map(([, label]) => label.toLowerCase());
+    const failure = failed.length ? `Could not check: ${failed.join(', ')}.` : '';
     const additions = Object.keys(result.art).filter(kind => !m.sel[kind]);
-    if (!additions.length) return;
+    if (!additions.length) {
+      if (failure) artStatus(failure);
+      return;
+    }
     if (m.sgdbId !== result.sgdbId) m.search = (m.search || 0) + 1;
     m.sgdbId = result.sgdbId;
     m.keepName = true;
@@ -2539,7 +2549,7 @@ async function findArtworkForGame() {
     for (const kind of additions) m.sel[kind] = result.art[kind];
     renderArtTabs();
     await loadArtTabs();
-    if (S.modal === m) artStatus(`Found ${additions.length} artwork choice${additions.length === 1 ? '' : 's'}. Save to review.`);
+    if (S.modal === m) artStatus(`Found ${additions.length} artwork choice${additions.length === 1 ? '' : 's'}. Save to review.${failure ? ` ${failure}` : ''}`);
   } catch (error) {
     if (S.modal === m) artStatus(`Artwork search failed: ${error.message || error}`);
   } finally { if (S.modal === m) button.disabled = false; }
