@@ -46,7 +46,7 @@ function createWindow() {
     height: 800,
     minWidth: 1060,
     minHeight: 660,
-    title: `Lib Shammes v${app.getVersion()}`,
+    title: `Shammes v${app.getVersion()}`,
     icon: path.join(__dirname, '..', 'assets', 'app-icon.ico'),
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#00000000', symbolColor: colors.text, height: 32 },
@@ -274,7 +274,7 @@ async function uninstallCleanup() {
     if (skipped.length) {
       await dialog.showMessageBox({
         type: 'warning', title: 'Some app data remains',
-        message: 'Lib Shammes will be uninstalled, but some app data could not be removed and will remain on disk.',
+        message: 'Shammes will be uninstalled, but some app data could not be removed and will remain on disk.',
         detail: skipped.join('\n'), buttons: ['OK'],
       });
     }
@@ -468,8 +468,8 @@ ipcMain.handle('shell:open', (_e, p) => shell.openPath(p));
 ipcMain.handle('util:open-url', (_e, url) => shell.openExternal(url));
 ipcMain.handle('util:check-update', async () => {
   try {
-    const response = await fetch('https://api.github.com/repos/Kirkland-Pickles/lib-shammes/releases/latest', {
-      headers: { 'User-Agent': 'Lib-Shammes', Accept: 'application/vnd.github+json' },
+    const response = await fetch('https://api.github.com/repos/Kirkland-Pickles/shammes/releases/latest', {
+      headers: { 'User-Agent': 'Shammes', Accept: 'application/vnd.github+json' },
       signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) return null;

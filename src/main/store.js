@@ -1,6 +1,4 @@
 'use strict';
-/* Config: %APPDATA%/Lib Shammes/config.json. Same keys as the v1-v3
-   Python app so existing configs (incl. sgdb/exe/title maps) carry over. */
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -40,6 +38,12 @@ function dataDir(name, fallback) {
 }
 
 function configDir() {
+  const previous = previousConfigDir();
+  // Undo records and wallpapers can reference files in this directory.
+  return fs.existsSync(previous) ? previous : dataDir('Shammes', '.shammes');
+}
+
+function previousConfigDir() {
   return dataDir('Lib Shammes', '.lib-shammes');
 }
 
@@ -140,7 +144,7 @@ function changesPath() {
 }
 
 function dataDirs() {
-  return [configDir(), legacyConfigDir()];
+  return [dataDir('Shammes', '.shammes'), previousConfigDir(), legacyConfigDir()];
 }
 
 function dataFiles() {

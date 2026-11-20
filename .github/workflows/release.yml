@@ -57,7 +57,7 @@ jobs:
           if ($null -eq $zip) {
             throw "No portable zip was produced in dist."
           }
-          $portable = Join-Path $zip.DirectoryName "Lib Shammes $version portable.zip"
+          $portable = Join-Path $zip.DirectoryName "Shammes $version portable.zip"
           Move-Item -LiteralPath $zip.FullName -Destination $portable
 
           "installer=$($installer.Name)" >> $env:GITHUB_OUTPUT
@@ -114,5 +114,5 @@ jobs:
           gh release create $env:RELEASE_TAG @assets `
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
-            --title "Lib Shammes $env:RELEASE_TAG" `
+            --title "Shammes $env:RELEASE_TAG" `
             --notes "Built and published by GitHub Actions."

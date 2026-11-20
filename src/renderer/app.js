@@ -1112,14 +1112,14 @@ function doFindExecutables() {
   dialog.setAttribute('closedby', 'any');
   dialog.setAttribute('aria-labelledby', 'exe-heading');
   dialog.innerHTML = `<h2 id="exe-heading">Find executables</h2>
-    <p class="muted">Search added folders up to 10 levels down, including utilities and uninstallers. Select the executables you want to work with in Lib Shammes.</p>
+    <p class="muted">Search added folders up to 10 levels down, including utilities and uninstallers. Select the executables you want to work with in Shammes.</p>
     <p id="exe-summary" role="status" hidden></p>
     <div id="exe-results"></div>
     <div class="modal-foot"><button class="btn sm" id="exe-select-all" hidden>Select all</button>
       <button class="btn sm" id="exe-select-none" hidden>Select none</button><span class="spacer"></span>
       <button class="btn sm" id="exe-cancel">Cancel</button>
       <button class="btn sm primary" id="exe-search" hidden>Retry</button>
-      <button class="btn sm primary" id="exe-add" hidden disabled>Show selected in Lib Shammes</button></div>`;
+      <button class="btn sm primary" id="exe-add" hidden disabled>Show selected in Shammes</button></div>`;
   document.body.appendChild(dialog);
   S.exePicker = dialog;
   const q = (sel) => dialog.querySelector(sel);
@@ -1148,7 +1148,7 @@ function doFindExecutables() {
       const choices = [];
       const updateSelection = () => {
         add.disabled = !selected.size;
-        add.textContent = selected.size ? `Show ${selected.size} in Lib Shammes` : 'Show selected in Lib Shammes';
+        add.textContent = selected.size ? `Show ${selected.size} in Shammes` : 'Show selected in Shammes';
       };
       const fragment = document.createDocumentFragment();
       for (const game of games) {
@@ -3072,7 +3072,7 @@ async function boot() {
     const button = $('#update-available');
     button.textContent = `${version} available`;
     button.hidden = false;
-    button.onclick = () => window.api.openUrl('https://github.com/Kirkland-Pickles/lib-shammes/releases/latest');
+    button.onclick = () => window.api.openUrl('https://github.com/Kirkland-Pickles/shammes/releases/latest');
   }).catch(() => {});
   S.cfg = await window.api.cfgGet();
   const showIntro = !S.cfg.library_intro_seen && !S.cfg.steam_path && !S.cfg.api_key

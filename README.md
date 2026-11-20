@@ -5,12 +5,12 @@ Shammes is a Windows app made to customize Steam game artwork using SteamGridDB.
 It can also bulk add games as non-Steam shortcuts (with artwork) or desktop shortcuts, set game artwork as your windows wallpaper, and change icons for desktop and Start menu shortcuts.
 
 <p align="center">
-  <a href="docs/screenshots/steam-library.png"><img src="docs/screenshots/steam-library.png" width="100%" alt="Lib Shammes Steam library with game covers" /></a>
+  <a href="docs/screenshots/steam-library.png"><img src="docs/screenshots/steam-library.png" width="100%" alt="Shammes Steam library with game covers" /></a>
 </p>
 
 ## Download
 
-[Download Shammes for Windows](https://github.com/Kirkland-Pickles/lib-shammes/releases/latest)
+[Download Shammes for Windows](https://github.com/Kirkland-Pickles/shammes/releases/latest)
  
 ## How to use
 
@@ -48,7 +48,7 @@ The installer will be in `dist\`.
 
 ## Help
 
-[Open an issue](https://github.com/Kirkland-Pickles/lib-shammes/issues) for bugs
+[Open an issue](https://github.com/Kirkland-Pickles/shammes/issues) for bugs
 or suggestions.
 
 ## Credits

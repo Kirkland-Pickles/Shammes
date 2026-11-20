@@ -30,7 +30,7 @@ describe('vdf codec', () => {
 
   it('upsert keeps entries dense and stable', () => {
     const entries = [];
-    const a = steam.buildEntry({ appName: 'A', exePath: 'C:\\A\\a.exe', startDir: 'C:\\A', tags: ['SGDB Manager'] });
+    const a = steam.buildEntry({ appName: 'A', exePath: 'C:\\A\\a.exe', startDir: 'C:\\A', tags: [steam.MANAGED_TAG] });
     const r1 = steam.upsertEntry(entries, a);
     assert.equal(r1.index, 0);
     assert.equal(r1.updated, false);
@@ -44,11 +44,11 @@ describe('vdf codec', () => {
     const foreign = steam.buildEntry({ appName: 'Same name', exePath: 'C:\\Old\\game.exe', launchOptions: '-old' });
     const original = structuredClone(foreign);
     const entries = [foreign];
-    const exact = steam.buildEntry({ appName: 'New name', exePath: 'C:\\Old\\game.exe', tags: ['SGDB Manager'] });
+    const exact = steam.buildEntry({ appName: 'New name', exePath: 'C:\\Old\\game.exe', tags: [steam.MANAGED_TAG] });
     assert.equal(steam.upsertEntry(entries, exact).existing, true);
     assert.deepEqual(entries, [original]);
 
-    const sameName = steam.buildEntry({ appName: 'Same name', exePath: 'D:\\New\\game.exe', tags: ['SGDB Manager'] });
+    const sameName = steam.buildEntry({ appName: 'Same name', exePath: 'D:\\New\\game.exe', tags: [steam.MANAGED_TAG] });
     assert.equal(steam.upsertEntry(entries, sameName).updated, false);
     assert.equal(entries.length, 2);
     assert.deepEqual(entries[0], original);
@@ -56,22 +56,22 @@ describe('vdf codec', () => {
 
   it('keeps custom fields and tags when updating shortcuts', () => {
     const old = steam.buildEntry({
-      appName: 'Old', exePath: 'C:\\Game\\game.exe', tags: ['SGDB Manager', 'Favorite'],
+      appName: 'Old', exePath: 'C:\\Game\\game.exe', tags: [steam.MANAGED_TAG, 'Favorite'],
     });
     old.CustomField = 'keep';
     const entries = [old];
     const next = steam.buildEntry({
-      appName: 'New', exePath: 'C:\\Game\\game.exe', launchOptions: '-new', tags: ['SGDB Manager'],
+      appName: 'New', exePath: 'C:\\Game\\game.exe', launchOptions: '-new', tags: [steam.MANAGED_TAG],
     });
     steam.upsertEntry(entries, next);
     assert.equal(entries[0].CustomField, 'keep');
     assert.equal(entries[0].LaunchOptions, '-new');
-    assert.deepEqual(Object.values(entries[0].tags), ['SGDB Manager', 'Favorite']);
+    assert.deepEqual(Object.values(entries[0].tags), [steam.MANAGED_TAG, 'Favorite']);
   });
 
   it('does not update a managed shortcut when nothing changed', () => {
     const entry = steam.buildEntry({
-      appName: 'Game', exePath: 'C:\\Game\\game.exe', tags: ['SGDB Manager'],
+      appName: 'Game', exePath: 'C:\\Game\\game.exe', tags: [steam.MANAGED_TAG],
     });
     const entries = [entry];
     const result = steam.upsertEntry(entries, structuredClone(entry));
@@ -81,10 +81,10 @@ describe('vdf codec', () => {
 
   it('keeps managed shortcuts with the same name separate', () => {
     const first = steam.buildEntry({
-      appName: 'Same name', exePath: 'C:\\First\\game.exe', tags: ['SGDB Manager'],
+      appName: 'Same name', exePath: 'C:\\First\\game.exe', tags: [steam.MANAGED_TAG],
     });
     const second = steam.buildEntry({
-      appName: 'Same name', exePath: 'D:\\Second\\game.exe', tags: ['SGDB Manager'],
+      appName: 'Same name', exePath: 'D:\\Second\\game.exe', tags: [steam.MANAGED_TAG],
     });
     const entries = [first];
     const result = steam.upsertEntry(entries, second);
@@ -96,10 +96,10 @@ describe('vdf codec', () => {
 
   it('updates a verified managed shortcut after its exe changes', () => {
     const first = steam.buildEntry({
-      appName: 'Game', exePath: 'C:\\Old\\game.exe', tags: ['SGDB Manager'],
+      appName: 'Game', exePath: 'C:\\Old\\game.exe', tags: [steam.MANAGED_TAG],
     });
     const next = steam.buildEntry({
-      appName: 'Game', exePath: 'D:\\New\\game.exe', tags: ['SGDB Manager'],
+      appName: 'Game', exePath: 'D:\\New\\game.exe', tags: [steam.MANAGED_TAG],
     });
     const entries = [first];
     const result = steam.upsertEntry(entries, next, 0);
@@ -110,14 +110,14 @@ describe('vdf codec', () => {
 
   it('does not move a verified shortcut onto another shortcut exe', () => {
     const first = steam.buildEntry({
-      appName: 'First', exePath: 'C:\\First\\game.exe', tags: ['SGDB Manager'],
+      appName: 'First', exePath: 'C:\\First\\game.exe', tags: [steam.MANAGED_TAG],
     });
     const second = steam.buildEntry({
-      appName: 'Second', exePath: 'D:\\Second\\game.exe', tags: ['SGDB Manager'],
+      appName: 'Second', exePath: 'D:\\Second\\game.exe', tags: [steam.MANAGED_TAG],
     });
     const entries = [first, second];
     const changed = steam.buildEntry({
-      appName: 'First', exePath: 'D:\\Second\\game.exe', tags: ['SGDB Manager'],
+      appName: 'First', exePath: 'D:\\Second\\game.exe', tags: [steam.MANAGED_TAG],
     });
     const result = steam.upsertEntry(entries, changed, 0);
     assert.equal(result.conflict, true);

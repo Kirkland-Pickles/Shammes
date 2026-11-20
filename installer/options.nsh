@@ -121,7 +121,7 @@
       !insertmacro UAC_AsUser_Call Function un.cleanup ${UAC_SYNCREGISTERS}
       ${If} $1 != 0
         SetErrorLevel 1
-        Abort "Uninstall cancelled. Lib Shammes has not been removed."
+        Abort "Uninstall cancelled. Shammes has not been removed."
       ${EndIf}
     FunctionEnd
   !macroend

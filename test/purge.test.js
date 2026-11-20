@@ -30,7 +30,7 @@ describe('planPurge', () => {
     const changed = path.join(grid, '2000000001_hero.png');
     fs.writeFileSync(changed, Buffer.alloc(50, 9));
     const entries = [
-      fakeEntry(-100, 'Ours', { 0: 'SGDB Manager' }),
+      fakeEntry(-100, 'Ours', { 0: 'Lib Shammes' }),
       fakeEntry(-200, 'Foreign', {}),
     ];
     // entry appids are signed; journal uses signed too

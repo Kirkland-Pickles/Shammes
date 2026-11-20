@@ -224,7 +224,7 @@ app.whenReady().then(async () => {
   assert.equal(result[0].ok, false);
   assert.match(result[0].error, /cancelled/);
   assert.deepEqual(fs.readFileSync(victim.shortcut), before);
-  assert.ok(!fs.readdirSync(shared).some((name) => name.startsWith('.lib-shammes-')));
+  assert.ok(!fs.readdirSync(shared).some((name) => name.startsWith('.shammes-')));
   saved = (await desktop.discover(games)).rows.find((row) => row.shortcut === saved.shortcut);
   result = await desktop.apply([{ ...victim, exe: path.join(root, 'missing.exe') }, saved]);
   assert.equal(result[0].ok, false);
@@ -276,7 +276,7 @@ app.whenReady().then(async () => {
   assert.equal(shortcutName('CON'), '_CON');
   assert.equal(shortcutName('LEGO Batman: Legacy of the Dark Knight'), 'LEGO Batman - Legacy of the Dark Knight');
   assert.equal(shortcutName('a/b*? '), 'a_b__');
-  const pipe = `\\\\.\\pipe\\lib-shammes-desktop-${randomUUID()}`;
+  const pipe = `\\\\.\\pipe\\shammes-desktop-${randomUUID()}`;
   let reply;
   const response = new Promise((resolve) => { reply = resolve; });
   const server = net.createServer((socket) => {

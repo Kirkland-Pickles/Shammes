@@ -56,8 +56,8 @@ async function setWallpaper(folder, jpeg, fit = 'fill') {
     if (error.code !== 'EEXIST') throw error;
   });
   await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command',
-    `$ErrorActionPreference = 'Stop'\n${wallpaperInterop}\n[DesktopWallpaper]::Set($env:LIB_SHAMMES_WALLPAPER, ${positions[fit]})`], {
-    env: { ...process.env, LIB_SHAMMES_WALLPAPER: file }, windowsHide: true, timeout: 20000,
+    `$ErrorActionPreference = 'Stop'\n${wallpaperInterop}\n[DesktopWallpaper]::Set($env:SHAMMES_WALLPAPER, ${positions[fit]})`], {
+    env: { ...process.env, SHAMMES_WALLPAPER: file }, windowsHide: true, timeout: 20000,
   });
 }
 

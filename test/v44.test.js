@@ -86,8 +86,8 @@ describe('stale shortcut pruning', () => {
     const real = path.join(td, 'real.exe');
     touch(real, 1000);
     const entries = [
-      { AppName: 'Gone', Exe: `"${path.join(td, 'gone.exe')}"`, tags: { 0: 'SGDB Manager' } },
-      { AppName: 'Here', Exe: `"${real}"`, tags: { 0: 'SGDB Manager' } },
+      { AppName: 'Gone', Exe: `"${path.join(td, 'gone.exe')}"`, tags: { 0: steam.MANAGED_TAG } },
+      { AppName: 'Here', Exe: `"${real}"`, tags: { 0: steam.MANAGED_TAG } },
       { AppName: 'Foreign', Exe: `"${path.join(td, 'gone.exe')}"`, tags: {} },
     ];
     const stale = steam.findStaleShortcuts(entries);

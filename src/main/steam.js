@@ -239,8 +239,8 @@ function findByExe(entries, exePath) {
   return entries.findIndex((e) => String(e.Exe || '').replace(/^"|"$/g, '').toLowerCase() === target);
 }
 
-const MANAGED_TAG = 'Lib Shammes';
-const MANAGED_TAGS = new Set([MANAGED_TAG, 'SGDB Manager']);
+const MANAGED_TAG = 'Shammes';
+const MANAGED_TAGS = new Set([MANAGED_TAG, 'Lib Shammes']);
 
 function isManagedEntry(entry) {
   return Object.values((entry && entry.tags) || {}).some((tag) => MANAGED_TAGS.has(tag));

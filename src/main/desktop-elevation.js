@@ -7,7 +7,7 @@ const { createDesktop, pathKey, sharedDesktop, knownFolder, inPrograms } = requi
 
 function elevateShortcut(app, row) {
   return new Promise((resolve, reject) => {
-    const pipe = `\\\\.\\pipe\\lib-shammes-desktop-${randomUUID()}`;
+    const pipe = `\\\\.\\pipe\\shammes-desktop-${randomUUID()}`;
     let socket;
     let finished = false;
     const finish = (error, value) => {
@@ -50,7 +50,7 @@ function elevateShortcut(app, row) {
 }
 
 async function runShortcutHelper(app, shell, nativeImage, pipe) {
-  if (!/^\\\\\.\\pipe\\lib-shammes-desktop-[a-f0-9-]{36}$/.test(pipe || '')) throw new Error('Invalid shortcut helper request.');
+  if (!/^\\\\\.\\pipe\\shammes-desktop-[a-f0-9-]{36}$/.test(pipe || '')) throw new Error('Invalid shortcut helper request.');
   const common = await sharedDesktop();
   const programs = await knownFolder('CommonPrograms');
   await new Promise((resolve, reject) => {

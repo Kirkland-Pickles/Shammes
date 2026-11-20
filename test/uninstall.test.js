@@ -97,7 +97,7 @@ it('only cleans icons when chosen and warns about retained ones', async () => {
 it('warns and continues uninstall when deleting app data fails', async () => {
   const calls = await uninstall(['--delete-app-data'], { dataFails: true });
   const warning = calls.find(([action]) => action === 'warning')[1];
-  assert.equal(warning.message, 'Lib Shammes will be uninstalled, but some app data could not be removed and will remain on disk.');
+  assert.equal(warning.message, 'Shammes will be uninstalled, but some app data could not be removed and will remain on disk.');
   assert.match(warning.detail, /config\.json \(locked\)/);
   assert.deepEqual(calls.at(-1), ['exit', 0]);
 });

@@ -5,7 +5,7 @@ const path = require('node:path');
 
 function tempDir(t) {
   const parent = fs.realpathSync.native(os.tmpdir());
-  const dir = fs.mkdtempSync(path.join(parent, 'lib-shammes-test-'));
+  const dir = fs.mkdtempSync(path.join(parent, 'shammes-test-'));
   t.after(() => {
     if (fs.realpathSync.native(dir) !== dir) throw new Error('Test directory moved');
     fs.rmSync(dir, { recursive: true, force: true });

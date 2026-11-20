@@ -81,7 +81,12 @@ function createDesktop({ app, shell, nativeImage, personal, shared, startMenu, s
   const menus = () => menuFolders ||= (personal ? Promise.resolve([startMenu, sharedStartMenu].filter(Boolean))
     : Promise.all([knownFolder('Programs'), knownFolder('CommonPrograms')])).catch(e => { menuFolders = null; throw e; });
   const roots = async () => [...new Set([personal || app.getPath('desktop'), await common(), ...await menus()])];
-  const cacheDir = () => iconDir || path.join(process.env.LOCALAPPDATA, 'Lib Shammes', 'Desktop icons');
+  const cacheDir = () => {
+    if (iconDir) return iconDir;
+    // Existing Windows shortcuts point directly to these icon files.
+    const previous = path.join(process.env.LOCALAPPDATA, 'Lib Shammes', 'Desktop icons');
+    return fs.existsSync(previous) ? previous : path.join(process.env.LOCALAPPDATA, 'Shammes', 'Desktop icons');
+  };
   const manifestPath = () => path.join(cacheDir(), 'shortcuts.json');
   const ownsIcon = (file) => !!file && pathKey(path.dirname(file)) === pathKey(cacheDir()) && /^[a-f0-9]{64}\.ico$/.test(path.basename(file));
   function manifest() {
@@ -172,7 +177,7 @@ function createDesktop({ app, shell, nativeImage, personal, shared, startMenu, s
     for (let suffix = 2; fs.existsSync(destination) && pathKey(destination) !== pathKey(original); suffix++) {
       destination = path.join(dir, `${name} (${suffix}).lnk`);
     }
-    const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'lib-shammes-link-'));
+    const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'shammes-link-'));
     const temp = path.join(staging, 'shortcut.lnk');
     const options = { target: row.exe, cwd: before ? before.cwd : path.dirname(row.exe), args: String(row.args || ''),
       icon: String(row.icon || ''), iconIndex: Number.isInteger(row.iconIndex) ? row.iconIndex : 0 };
