@@ -61,6 +61,7 @@
     Page custom desktopPage desktopPageLeave
   !macroend
 !else
+  SpaceTexts none
   !define removeDefaultUninstallWelcomePage
   !define MUI_COMPONENTSPAGE_TEXT_TOP "Undo Steam changes uses the account selected in Settings. Games are kept. Deleting settings also deletes the undo history."
   !define MUI_PAGE_CUSTOMFUNCTION_PRE un.optionsPre
