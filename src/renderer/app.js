@@ -795,10 +795,9 @@ function renderChoiceList(pick) {
     const index = Number(button.dataset.index);
     const changed = index !== pick.selectedIndex;
     pick.selectedIndex = index;
-    for (const item of list.children) {
-      item.setAttribute('aria-pressed', String(item === button));
-      item.tabIndex = item === button ? 0 : -1;
-    }
+    const choices = pick.closest('.launcher-candidates');
+    choices.open = false;
+    $('summary', choices).focus();
     if (changed) pick.dispatchEvent(new Event('change', { bubbles: true }));
   };
   list.onkeydown = event => {

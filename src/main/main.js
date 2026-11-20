@@ -49,7 +49,7 @@ function createWindow() {
     title: `Shammes v${app.getVersion()}`,
     icon: path.join(__dirname, '..', 'assets', 'app-icon.ico'),
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#00000000', symbolColor: colors.text, height: 32 },
+    titleBarOverlay: { color: '#00000000', symbolColor: colors.text, height: 48 },
     backgroundColor: colors.background,
     autoHideMenuBar: true,
     webPreferences: {
