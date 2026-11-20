@@ -7,8 +7,7 @@ It can also scan your game folders, find installed games, and bulk add them as n
 ## Screenshots
 
 <p align="center">
-  <a href="docs/screenshots/steam-library.png"><img src="docs/screenshots/steam-library.png" width="49%" alt="Steam library with game covers" /></a>
-  <a href="docs/screenshots/artwork-picker.png"><img src="docs/screenshots/artwork-picker.png" width="49%" alt="Artwork picker showing God of War covers" /></a>
+  <a href="docs/screenshots/steam-library.png"><img src="docs/screenshots/steam-library.png" width="100%" alt="Lib Shammes Steam library with game covers" /></a>
 </p>
 
 ## Install
