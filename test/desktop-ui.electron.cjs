@@ -578,7 +578,7 @@ app.whenReady().then(async () => {
   await click('#close-add');
   await click('#games .game-name');
   await click('#art-find-for-me');
-  await wait("document.querySelector('#art-status').textContent.startsWith('Found 5 artwork choices')");
+  await wait("document.querySelector('#art-status').textContent.startsWith('Found artwork for 5 types.')");
   await click('#art-cancel');
   await wait("document.querySelector('#art-overlay').hidden");
   console.log('Desktop fixture checks passed');

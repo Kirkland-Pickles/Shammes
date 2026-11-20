@@ -2522,18 +2522,19 @@ async function findArtworkForGame() {
   const m = S.modal;
   const button = $('#art-find-for-me');
   if (!m || button.disabled || !S.cfg.api_key) return;
+  const desktop = m.row.source === 'desktop';
   const id = m.sgdbId;
   const key = S.cfg.api_key;
   const search = m.search;
   button.disabled = true;
-  artStatus('Finding artwork…');
+  artStatus(desktop ? 'Looking for an icon…' : 'Finding artwork…');
   try {
     const result = await suggestArtwork(m.row, m.sel, id, m.row.sgdbName);
     if (S.modal !== m || S.cfg.api_key !== key || m.search !== search
       || (m.sgdbId !== id && result?.sgdbId !== m.sgdbId)) return;
-    if (!result) { artStatus('No missing artwork found.'); return; }
+    if (!result) { artStatus(desktop ? 'No icon suggestion found.' : 'No missing artwork found.'); return; }
     const failed = ART_TABS.filter(([kind]) => result.failed.includes(kind)).map(([, label]) => label.toLowerCase());
-    const failure = failed.length ? `Could not check: ${failed.join(', ')}.` : '';
+    const failure = failed.length ? `Could not check ${desktop ? 'for an icon' : failed.join(', ')}.` : '';
     const additions = Object.keys(result.art).filter(kind => !m.sel[kind]);
     if (!additions.length) {
       if (failure) artStatus(failure);
@@ -2549,9 +2550,12 @@ async function findArtworkForGame() {
     for (const kind of additions) m.sel[kind] = result.art[kind];
     renderArtTabs();
     await loadArtTabs();
-    if (S.modal === m) artStatus(`Found ${additions.length} artwork choice${additions.length === 1 ? '' : 's'}. Save to review.${failure ? ` ${failure}` : ''}`);
+    if (S.modal === m) {
+      const found = desktop ? 'Icon suggestion ready.' : `Found artwork for ${additions.length} type${additions.length === 1 ? '' : 's'}.`;
+      artStatus(`${found} Save to review.${failure ? ` ${failure}` : ''}`);
+    }
   } catch (error) {
-    if (S.modal === m) artStatus(`Artwork search failed: ${error.message || error}`);
+    if (S.modal === m) artStatus(`${desktop ? 'Icon' : 'Artwork'} search failed. ${error.message || error}`);
   } finally { if (S.modal === m) button.disabled = false; }
 }
 
