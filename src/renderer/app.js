@@ -2164,7 +2164,10 @@ function renderArtTabs() {
     b.className = `tab${m.tab === kind ? ' on' : ''}`;
     b.textContent = label;
     const picked = m.sel[kind];
-    if (picked) b.textContent += ' ★';
+    if (picked) {
+      b.classList.add('has-choice');
+      b.setAttribute('aria-label', `${label}, ${picked.reset ? 'restore default selected' : 'artwork selected'}`);
+    }
     b.addEventListener('click', () => {
       const restoreFocus = document.activeElement === b;
       $('#art-url-entry').hidden = true;

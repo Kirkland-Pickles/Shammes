@@ -251,6 +251,7 @@ button.game-open:hover:not(:disabled) { border-color: transparent; background: t
 .tab:hover { color: var(--fg); background: transparent; }
 .tab.on { color: var(--accent); font-weight: 650; }
 .tab.on::after { position: absolute; right: 8px; bottom: 0; left: 8px; height: 2px; background: var(--accent); content: ""; }
+#art-tabs .tab.has-choice::before { position: absolute; top: 50%; right: 5px; width: 4px; height: 4px; border-radius: 50%; background: var(--muted); transform: translateY(-50%); content: ""; }
 .thumbScroll { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; padding: 16px 4px; }
 #art-grid .art-load-error { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
 #art-grid[hidden], #art-preview[hidden] { display: none !important; }
