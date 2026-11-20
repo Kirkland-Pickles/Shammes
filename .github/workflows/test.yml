@@ -20,3 +20,41 @@ jobs:
           cache: npm
       - run: npm.cmd ci
       - run: npm.cmd test
+
+      - name: Build Windows test packages
+        run: npm.cmd run build
+
+      - name: Name test packages
+        id: packages
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $commit = $env:GITHUB_SHA.Substring(0, 7)
+          $installer = "Lib Shammes Setup $version-$commit.exe"
+          $portable = "Lib Shammes $version-$commit portable.zip"
+
+          Rename-Item -LiteralPath "dist/Lib Shammes Setup $version.exe" -NewName $installer
+          Rename-Item -LiteralPath "dist/Lib Shammes-$version-win.zip" -NewName $portable
+
+          "installer=$installer" >> $env:GITHUB_OUTPUT
+          "portable=$portable" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.packages.outputs.installer }}
+          path: dist/${{ steps.packages.outputs.installer }}
+          archive: false
+          retention-days: 7
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Upload Windows portable ZIP
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.packages.outputs.portable }}
+          path: dist/${{ steps.packages.outputs.portable }}
+          archive: false
+          retention-days: 7
+          if-no-files-found: error
+          overwrite: true
