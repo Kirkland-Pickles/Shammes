@@ -2519,11 +2519,13 @@ async function findArtworkForGame() {
   if (!m || button.disabled || !S.cfg.api_key) return;
   const id = m.sgdbId;
   const key = S.cfg.api_key;
+  const search = m.search;
   button.disabled = true;
   artStatus('Finding artwork…');
   try {
     const result = await suggestArtwork(m.row, m.sel, id, m.row.sgdbName);
-    if (S.modal !== m || S.cfg.api_key !== key || (m.sgdbId !== id && result?.sgdbId !== m.sgdbId)) return;
+    if (S.modal !== m || S.cfg.api_key !== key || m.search !== search
+      || (m.sgdbId !== id && result?.sgdbId !== m.sgdbId)) return;
     if (!result) { artStatus('No missing artwork found.'); return; }
     const additions = Object.keys(result.art).filter(kind => !m.sel[kind]);
     if (!additions.length) return;
