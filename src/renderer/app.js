@@ -2577,9 +2577,11 @@ async function renderArtManage() {
       renderArtTabs();
     };
     const choice = m.sel[kind];
-    const current = m.row.source === 'desktop' ? { url: choice?.file
-      ? await localArtPreview(choice.file).catch(() => null)
-      : choice?.thumb || choice?.url || await desktopIconPreview(m.row).catch(() => null) }
+    const current = m.row.source === 'desktop' ? {
+      url: choice?.file ? await localArtPreview(choice.file).catch(() => null)
+        : choice?.url || choice?.thumb || await desktopIconPreview(m.row).catch(() => null),
+      thumb: choice?.file ? undefined : choice?.thumb,
+    }
       : choice?.reset ? await stockArtwork(m, kind)
       : choice?.file || choice?.url ? choice : await window.api.artCurrent({ row: rowPayload(m.row), kind }).catch(() => null);
     if (S.modal !== m || m.tab !== 'manage' || !cell.isConnected) return;
