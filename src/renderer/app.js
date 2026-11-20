@@ -2101,7 +2101,7 @@ async function closeArtModal(save, remind = false) {
     const match = m.games.find(game => game.id === m.sgdbId);
     const updated = { ...m.row, iconChoice: m.sel.icon || null, art: { ...m.sel }, sgdbId: m.sgdbId,
       ...(match && m.sgdbId !== m.row.sgdbId
-        ? { display: m.renamedShortcut || m.keepName ? m.row.display : match.name, sgdbName: match.name } : {}) };
+        ? { display: m.renamedShortcut || m.matchSource === 'finder' ? m.row.display : match.name, sgdbName: match.name } : {}) };
     try { await saveDesktopDraft(m.row, updated); Object.assign(m.row, Object.fromEntries([...desktopEditFields, 'art'].map(key => [key, updated[key]])));  }
     catch (error) { artStatus(`Choices could not be saved: ${error.message || error}`); return; }
     finally { m.applying = false; $('#art-modal').inert = false; }
@@ -2541,7 +2541,7 @@ async function findArtworkForGame() {
     }
     if (m.sgdbId !== result.sgdbId) m.search = (m.search || 0) + 1;
     m.sgdbId = result.sgdbId;
-    m.keepName = true;
+    if (m.matchSource !== 'manual') m.matchSource = 'finder';
     if (!m.games.some(game => game.id === result.sgdbId) && result.sgdbName) {
       m.games.push({ id: result.sgdbId, name: result.sgdbName });
     }
@@ -2762,6 +2762,7 @@ async function artSearch(showMatches = false) {
     sel.value = String(g.id);
     renderChoiceList(sel);
     if (!S.cfg.api_key) { m.stock = {}; m.steamId = g.id; await loadArtTabs(); return; }
+    if (showMatches) m.matchSource = 'manual';
     m.sgdbId = g.id;
     $('#art-id').value = String(g.id);
     artStatus(`Matched '${g.name}' (${g.id}). Loading artwork…`);
@@ -2780,6 +2781,7 @@ async function artLoadId() {
     artStatus('Enter a valid SGDB game ID.');
     return;
   }
+  m.matchSource = 'manual';
   if (gid === m.sgdbId) return;
   $('#art-matches').hidden = true;
   m.search = (m.search || 0) + 1;
@@ -2901,6 +2903,7 @@ function wireToolbar() {
     if (g) {
       m.search = (m.search || 0) + 1;
       if (!S.cfg.api_key) { m.stock = {}; m.steamId = g.id; await loadArtTabs(); return; }
+      m.matchSource = 'manual';
       m.sgdbId = g.id;
       $('#art-id').value = String(g.id);
       await loadArtTabs();
