@@ -1,27 +1,22 @@
-# Lib Shammes
+# Shammes
 
-Lib Shammes is an app made to customize and modify your Steam game artwork using SteamGridDB.
+Shammes is a Windows app made to customize Steam game artwork using SteamGridDB.
 
-It can also scan your game folders, find installed games, and bulk add them as non-Steam shortcuts or desktop shortcuts. You can choose their artwork before adding them.
-
-## Screenshots
+It can also bulk add games as non-Steam shortcuts (with artwork) or desktop shortcuts, set game artwork as your windows wallpaper, and change icons for desktop and Start menu shortcuts.
 
 <p align="center">
   <a href="docs/screenshots/steam-library.png"><img src="docs/screenshots/steam-library.png" width="100%" alt="Lib Shammes Steam library with game covers" /></a>
 </p>
 
-## Install
+## Download
 
-download windows release [here](https://github.com/Kirkland-Pickles/lib-shammes/releases/latest)
+[Download Shammes for Windows](https://github.com/Kirkland-Pickles/lib-shammes/releases/latest)
  
 ## How to use
-
 
 *For games outside Steam:*  
 
 use <img src="docs/icons/add-games-folder.svg" width="16" height="16" alt="Add games folder" />, choose a game’s folder or a folder containing multiple games. Review the name, launcher and game match before adding them to Steam.
-
-To manage Desktop or Start-menu shortcuts, change **Destination**.  
 
 
 *For Steam games:* 
@@ -33,7 +28,7 @@ Choose artwork for each game, then save your choices and use **Review changes** 
 
 ## Undoing changes
 
-Use **Purge** to undo the changes made by Lib Shammes. It uses a saved
+Use **Purge** to undo the changes made by the app. It uses a saved
 record of those changes for this purpose. Steam's shortcut
 file is backed up before anything is changed.
 
