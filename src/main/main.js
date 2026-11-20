@@ -43,7 +43,7 @@ function createWindow() {
   const colors = windowColors();
   win = new BrowserWindow({
     width: 1280,
-    height: 800,
+    height: 830,
     minWidth: 1060,
     minHeight: 660,
     title: `Shammes v${app.getVersion()}`,
