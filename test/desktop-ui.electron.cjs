@@ -139,10 +139,14 @@ async function windowsShortcuts() {
     display: 'Fixture game', exe: 'C:/Games/Game.exe', args: '', admin: false, candidates: [],
   }));
   const attempts = [];
+  let finishScan;
+  const scan = new Promise(resolve => { finishScan = resolve; });
+  let steamUsers = [{ id: '1', name: 'Fixture' }, { id: '2', name: 'Removed' }];
   await check('Paired Windows shortcut Review', {
     cfg: { desktop_destination: 'both' },
     handlers: {
-      'desktop:scan': () => ({ rows, warnings: [] }),
+      'steam:detect': () => ({ path: 'C:/Steam', users: steamUsers }),
+      'desktop:scan': () => scan,
       'desktop:apply': selected => {
         attempts.push(selected);
         return selected.map(row => attempts.length === 1 && row.destination === 'start-menu'
@@ -152,7 +156,15 @@ async function windowsShortcuts() {
     },
   }, async ({ run, click, wait }) => {
     await click('#desktop-destination [data-destination="desktop"]');
+    await wait("document.querySelector('#page-desktop').classList.contains('on') && document.querySelector('#desktop-games').textContent.includes('Loading Windows games')");
+    assert.equal(await run("document.querySelector('#center').inert"), false);
+    finishScan({ rows, warnings: [] });
     await wait("document.querySelector('#page-desktop').classList.contains('on') && document.querySelector('#desktop-games .game-open')");
+    assert.ok(await run("document.querySelector('input[name=steam-account][value=\"2\"]') !== null"));
+    steamUsers = steamUsers.slice(0, 1);
+    await run("document.querySelector('#preferences').open = true");
+    await wait("!document.querySelector('input[name=steam-account][value=\"2\"]')");
+    await run("document.querySelector('#preferences').open = false");
     assert.equal(await run("document.querySelectorAll('#desktop-games .game-card-row').length"), 1);
     await click('#desktop-games .game-open');
     await wait("document.querySelector('#art-grid > .thumb .thumb-select') !== null");

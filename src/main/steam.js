@@ -68,14 +68,13 @@ function getUserPersonas(steamPath) {
     const text = fs.readFileSync(path.join(steamPath, 'config', 'loginusers.vdf'), 'utf8');
     for (const m of text.matchAll(/"(\d{17})"\s*\{([^}]*)\}/g)) {
       const pm = /"PersonaName"\s+"([^"]*)"/.exec(m[2]);
-      if (!pm) continue;
       try {
         const accountId = Number(BigInt(m[1]) - 76561197960265728n);
-        if (Number.isSafeInteger(accountId) && pm[1]) names.set(String(accountId), pm[1]);
+        if (Number.isSafeInteger(accountId) && accountId > 0) names.set(String(accountId), pm?.[1] || String(accountId));
       } catch { /* ignore malformed ids */ }
     }
   } catch { /* no loginusers.vdf yet (never logged in) - ids only */ }
-  return ids.map((id) => ({ id, name: names.get(id) || id }));
+  return ids.filter(id => !names.size || names.has(id)).map(id => ({ id, name: names.get(id) || id }));
 }
 
 async function findSteamPath(hint) {

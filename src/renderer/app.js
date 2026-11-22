@@ -231,12 +231,10 @@ async function showLibrary(switching = false) {
     $('#page-desktop').classList.toggle('on', desktop);
     renderLog();
   };
-  if (switching) {
-    try { await load(); } finally { reveal(); }
-    return;
-  }
   reveal();
-  if (desktop) renderDesktop(); else renderRows();
+  if (!switching) {
+    if (desktop) renderDesktop(); else renderRows();
+  }
   await load();
 }
 
@@ -246,6 +244,7 @@ async function detectSteam() {
   await syncCfg();
   S.steamUsers = result.users || [];
   S.steamFound = !!result.path;
+  renderSteamAccounts();
   if (result.path && folderKey(result.path) !== lastDetectedSteamPath) log(`Steam found at ${result.path}`);
   lastDetectedSteamPath = folderKey(result.path);
 }
@@ -484,6 +483,21 @@ function renderSettingsCards(key = keyCard()) {
   header.append($('h3', key), theme);
   key.prepend(header);
   host.appendChild(key);
+  const danger = document.createElement('div');
+  danger.className = 'card settings-block';
+  danger.innerHTML = `<h3>Danger zone</h3>
+    <div class="row"><button class="btn danger sm" data-r="purge">Purge</button>
+    <button class="btn danger sm" data-r="wipe">Delete app data</button></div>`;
+  danger.querySelector('[data-r="purge"]').addEventListener('click', handleAction('Purge', doPurge));
+  danger.querySelector('[data-r="wipe"]').addEventListener('click', doWipeData);
+  host.appendChild(danger);
+  renderSteamAccounts();
+}
+
+function renderSteamAccounts() {
+  const host = $('#settings-cards');
+  if (!host.lastElementChild) return;
+  $('.steam-accounts', host)?.remove();
   if (S.steamUsers.length > 1) {
     const accounts = document.createElement('fieldset');
     accounts.className = 'steam-accounts';
@@ -502,16 +516,8 @@ function renderSettingsCards(key = keyCard()) {
         accounts.disabled = false;
       }
     }));
-    host.appendChild(accounts);
+    host.insertBefore(accounts, host.lastElementChild);
   }
-  const danger = document.createElement('div');
-  danger.className = 'card settings-block';
-  danger.innerHTML = `<h3>Danger zone</h3>
-    <div class="row"><button class="btn danger sm" data-r="purge">Purge</button>
-    <button class="btn danger sm" data-r="wipe">Delete app data</button></div>`;
-  danger.querySelector('[data-r="purge"]').addEventListener('click', handleAction('Purge', doPurge));
-  danger.querySelector('[data-r="wipe"]').addEventListener('click', doWipeData);
-  host.appendChild(danger);
 }
 
 async function doWipeData() {
@@ -539,7 +545,7 @@ async function doPurge() {
     return;
   }
   if (!plan.removeAppids.length && !plan.restoreFields.length && !plan.deleteFiles.length && !plan.restoreFiles.length) {
-    toast("Nothing to purge - Steam is clean of the app's changes.");
+    toast('Nothing to purge');
     log('Purge check: nothing to undo.');
     return;
   }
@@ -3160,6 +3166,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function wireWorkspace() {
   wireReview();
+  const preferences = $('#preferences');
+  preferences.addEventListener('toggle', handleAction('Check Steam accounts', async () => {
+    if (!preferences.open || S.applyingSteam || S.loadingLibrary) return;
+    const scope = steamDraftScope();
+    await detectSteam();
+    if (scope !== steamDraftScope()) {
+      S.rows = [];
+      if (libraryView() === 'library') await showLibrary();
+    }
+    renderLibrarySetup();
+  }));
   const intro = $('#library-intro');
   intro.addEventListener('close', handleAction('Save setup preference', async () => {
     renderSettingsCards($('#intro-key').firstElementChild);
@@ -3180,8 +3197,12 @@ function wireWorkspace() {
       S.artReturn = S.reviewReturn = null;
       try {
         await savePatch({ startup_library: button.dataset.destination });
+        $('#center').inert = false;
         await showLibrary(true);
-      } finally { picker.inert = $('#center').inert = false; button.focus({ preventScroll: true }); }
+      } finally {
+        picker.inert = $('#center').inert = false;
+        if (document.activeElement === document.body) button.focus({ preventScroll: true });
+      }
     })();
   };
   const location = $('#shortcut-location');

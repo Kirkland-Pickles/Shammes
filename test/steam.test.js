@@ -52,15 +52,12 @@ describe('steam paths', () => {
     fs.mkdirSync(path.join(sp, 'userdata', '87654321'), { recursive: true });
     fs.mkdirSync(path.join(sp, 'userdata', '102345678'), { recursive: true });
     fs.mkdirSync(path.join(sp, 'config'), { recursive: true });
+    assert.equal(steam.getUserPersonas(sp).length, 3);
     fs.writeFileSync(path.join(sp, 'config', 'loginusers.vdf'),
-      '"users"\n{\n\t"76561198062611406"\n\t{\n\t\t"AccountName"\t"foo"\n\t\t"PersonaName"\t"FooBar"\n\t}\n}\n');
-    // 76561198062611406 - 76561197960265728 = 102345678, so that user is FooBar.
-    const users = steam.getUserPersonas(sp);
-    assert.equal(users.length, 3);
-    const named = users.find((u) => u.id === '102345678');
-    assert.equal(named.name, 'FooBar');
-    // unknown ids fall back to the raw id
-    for (const u of users) assert.ok(u.id && u.name);
+      '"users"\n{\n\t"76561198062611406"\n\t{\n\t\t"PersonaName"\t"FooBar"\n\t}\n\t"76561197972611406"\n\t{\n\t\t"AccountName"\t"bar"\n\t}\n}\n');
+    assert.deepEqual(steam.getUserPersonas(sp), [
+      { id: '102345678', name: 'FooBar' }, { id: '12345678', name: '12345678' },
+    ]);
   });
 
   it('maps a known steam64 to its account id', (t) => {
