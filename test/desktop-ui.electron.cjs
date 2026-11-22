@@ -72,7 +72,8 @@ async function steamArtwork() {
     games: [{ appid: 42, name: 'Fixture game' }],
     handlers: {
       'sgdb:search': () => [{ id: 17, name: 'Game' }, { id: 42, name: 'Different game' }],
-      'art:list': ({ sgdbId }) => sgdbId === 42 ? [preview] : [{ ...preview, id: 8, url: image + '#first-match' }],
+      'art:list': ({ sgdbId }) => sgdbId === 42 ? [{ ...preview, thumb: 'data:image/webp;base64,AAAA' }]
+        : [{ ...preview, id: 8, url: image + '#first-match' }],
       'art:wallpaper-available': () => ({ width: 1920, height: 1080 }),
       'art:set-wallpaper': (...args) => { wallpaper = args; },
       'art:thumbnail': () => appliedCover,
@@ -114,6 +115,8 @@ async function steamArtwork() {
     assert.match(wallpaper[1], /^data:image\/jpeg;base64,/);
     assert.equal(wallpaper[2], 'fit');
     await click('#art-preview-back');
+    await run("[...document.querySelectorAll('#art-tabs button')].find(tab => tab.textContent === 'Manage').click()");
+    await wait("document.querySelector('.manage-preview-open:not([hidden]) img')?.src === " + JSON.stringify(preview.url));
     await run("[...document.querySelectorAll('#art-tabs button')].find(tab => tab.textContent === 'Logo').click()");
     await click('[data-logo-anchor="CenterCenter"]');
     await click('#art-save');

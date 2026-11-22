@@ -25,6 +25,16 @@ it('falls back to defaults for config values with the wrong type', t => {
   assert.deepEqual(store.load().games_roots, ['D:/Games']);
 });
 
+it('keeps only shared content and motion when migrating artwork filters', () => {
+  assert.deepEqual(store.sanitizePatch({ artwork_filters: {
+    grid: { static: false, animated: true, dimensions: ['600x900'] },
+    hero: { animated: false, nsfw: true },
+  } }), { artwork_filters: { static: false, animated: true } });
+  assert.deepEqual(store.sanitizePatch({ artwork_filters: {
+    nsfw: true, humor: false, styles: ['official'], animated: 'yes',
+  } }), { artwork_filters: { nsfw: true, humor: false } });
+});
+
 describe('folder depths', () => {
   it('loads existing folder depths and preserves zero', () => {
     const td = fs.mkdtempSync(path.join(os.tmpdir(), 'config-'));

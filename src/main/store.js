@@ -109,9 +109,17 @@ function sanitizePatch(patch) {
       : expected === null ? value === null || record
         : typeof expected === 'object' ? record
           : typeof value === typeof expected && (typeof value !== 'number' || Number.isFinite(value));
-    if (valid) clean[k] = value;
+    if (valid) clean[k] = k === 'artwork_filters' ? sharedArtworkFilters(value) : value;
   }
   return clean;
+}
+
+function sharedArtworkFilters(filters) {
+  const keys = ['static', 'animated', 'untagged', 'nsfw', 'humor', 'epilepsy'];
+  const hasSettings = value => keys.some(key => typeof value?.[key] === 'boolean');
+  const source = hasSettings(filters) ? filters
+    : ['grid', 'wide', 'hero', 'logo', 'icon'].map(kind => filters[kind]).find(hasSettings);
+  return Object.fromEntries(keys.filter(key => typeof source?.[key] === 'boolean').map(key => [key, source[key]]));
 }
 
 function folderKey(folder) {

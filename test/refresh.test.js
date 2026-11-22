@@ -101,17 +101,25 @@ it('refreshes the cover when switching back to the exe icon', async () => {
 
 it('uses default sizes unless sizes were explicitly chosen', () => {
   const { context, state } = renderer({});
-  state.cfg = { artwork_filters: {} };
+  state.cfg = { artwork_filters: { static: false, animated: true, nsfw: true } };
+  state.modal = { row: { source: 'steam' }, typeFilters: {} };
   const dimensions = kind => Array.from(vm.runInContext(`pickerFilters('${kind}').dimensions || []`, context));
   assert.deepEqual(dimensions('grid'), ['600x900', '342x482', '660x930']);
   assert.deepEqual(dimensions('wide'), ['460x215', '920x430']);
   assert.deepEqual(dimensions('hero'), ['1920x620', '3840x1240', '1600x650']);
   assert.deepEqual(dimensions('logo'), []);
   assert.ok(dimensions('icon').includes('256'));
-  state.cfg.artwork_filters.grid = { dimensions: ['512x512'] };
+  state.modal.typeFilters.grid = { dimensions: ['512x512'] };
   assert.deepEqual(dimensions('grid'), ['512x512']);
-  state.cfg.artwork_filters.grid.dimensions = [];
+  state.modal.typeFilters.grid.dimensions = [];
   assert.deepEqual(dimensions('grid'), []);
+  for (const kind of ['grid', 'wide', 'hero', 'logo', 'icon']) {
+    assert.equal(vm.runInContext(`pickerFilters('${kind}').animated`, context), true);
+    assert.equal(vm.runInContext(`pickerFilters('${kind}').nsfw`, context), true);
+  }
+  state.modal = { row: { source: 'desktop' }, typeFilters: {} };
+  assert.deepEqual(dimensions('grid'), ['600x900', '342x482', '660x930']);
+  assert.equal(vm.runInContext("pickerFilters('icon').animated", context), false);
 });
 
 it('uses a suggested cover without setting the native game match', async () => {
@@ -391,6 +399,61 @@ it('loads the active art tab once and ignores stale replies', async () => {
   await vm.runInContext('loadArtTabs()', context);
   assert.equal(requests.length, 2);
   assert.deepEqual(requests.map(({ req }) => [req.kind, req.page]), [['grid', 0], ['hero', 0]]);
+});
+
+it('shuffles later artwork pages without repeating or replacing manual choices', async () => {
+  const pages = [];
+  const { context, state } = renderer({
+    artCurrent: async () => null,
+    artList: async ({ sgdbId, kind, page }) => {
+      assert.equal(kind, 'grid');
+      pages.push([sgdbId, page]);
+      if (sgdbId === 8) return [{ url: 'new-match' }];
+      return page === 0 ? Array.from({ length: 30 }, (_, i) => ({ url: i ? 'b' : 'a' })) : [{ url: 'c' }];
+    },
+  });
+  vm.runInContext('renderArtTabs = () => {}; loadArtTabs = async () => {};', context);
+  state.cfg = { api_key: 'fixture' };
+  const manual = { url: 'manual' };
+  const modal = state.modal = { sgdbId: 7, row: { source: 'steam' }, games: [], finderClicks: 0,
+    sel: { wide: manual, hero: manual, logo: manual, icon: manual } };
+  const click = () => vm.runInContext('findArtworkForGame()', context);
+  for (const expected of ['a', 'b', 'c']) {
+    await click();
+    assert.equal(modal.sel.grid.url, expected);
+  }
+  assert.deepEqual(pages, [[7, 0], [7, 1]]);
+  await click();
+  assert.notEqual(modal.sel.grid.url, 'c');
+  modal.sgdbId = 8;
+  await click();
+  assert.equal(modal.sel.grid.url, 'new-match');
+  assert.equal(modal.sel.hero, manual);
+  modal.sel.grid = manual;
+  modal.sgdbId = 9;
+  await click();
+  assert.equal(modal.sel.grid, manual);
+  assert.equal(modal.sel.hero, manual);
+  assert.deepEqual(pages, [[7, 0], [7, 1], [8, 0]]);
+});
+
+it('loosens finder filters after empty results while keeping content restrictions', async () => {
+  const requests = [];
+  const { context, state } = renderer({ artList: async ({ filters }) => {
+    requests.push(filters);
+    return filters.static ? [{ url: 'fallback' }] : [];
+  } });
+  state.cfg = {};
+  const choice = await vm.runInContext(`finderChoice({ sgdbId: 7, kind: 'hero', filters: {
+    static: false, animated: true, nsfw: false, humor: false, dimensions: ['3840x1240'], styles: ['blurred'],
+  } })`, context);
+  assert.equal(choice.item.url, 'fallback');
+  assert.equal(requests.length, 3);
+  assert.deepEqual(Array.from(requests[0].dimensions), ['3840x1240']);
+  assert.equal(requests[1].styles, undefined);
+  assert.equal(requests[1].static, false);
+  assert.equal(requests[2].static, true);
+  assert.ok(requests.every(({ nsfw, humor }) => nsfw === false && humor === false));
 });
 
 it('keeps a shortcut choice when Steam refreshes its name', async () => {

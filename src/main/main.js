@@ -658,15 +658,15 @@ ipcMain.handle('resolve:name', async (_e, name) => {
 
 ipcMain.handle('art:list', (_e, req) => listArtwork(req));
 ipcMain.handle('art:logo-position', (_e, row) => steam.logoPosition(cfg.steam_path, cfg.steam_user_id, row));
-function artworkFilters(kind, defaults = {}) {
+function artworkFilters() {
   return { animated: cfg.include_animated, nsfw: cfg.include_nsfw, humor: cfg.include_humor,
-    ...defaults, ...cfg.artwork_filters?.[kind] };
+    ...cfg.artwork_filters };
 }
 async function listArtwork(req, c = client()) {
   const sgdbId = Number(req && req.sgdbId);
   if (!Number.isFinite(sgdbId) || sgdbId <= 0) throw new Error('Art list needs an SGDB game id.');
   const kind = req.kind;
-  const filters = req.filters || artworkFilters(kind);
+  const filters = req.filters || artworkFilters();
   const o = {
     types: [filters.static !== false && 'static', filters.animated && 'animated'].filter(Boolean).join(','),
     nsfw: filters.nsfw ? 'any' : 'false',

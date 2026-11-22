@@ -1868,6 +1868,7 @@ async function applyDesktopShortcuts(rowsOverride, options = {}) {
 
 // ------------------------------------------------------- artwork modal
 const ART_TABS = [['grid', 'Cover'], ['wide', 'Wide cover'], ['hero', 'Background'], ['logo', 'Logo'], ['icon', 'Icon']];
+const ART_PAGE_SIZE = 30;
 const modalTabs = () => S.modal?.row.source === 'desktop' ? [['icon', 'Icon'], ['manage', 'Manage']] : [...ART_TABS, ['manage', 'Manage']];
 let artModalMotion = 0;
 
@@ -1910,30 +1911,21 @@ const ART_DIMENSIONS = {
 };
 const dimensionLabel = (kind, value) => kind === 'icon' ? `${value}x${value}` : value;
 
-function savedPickerFilters(kind, defaultsOnly = false) {
-  return { static: true, animated: !!S.cfg.include_animated, untagged: true,
+function defaultPickerFilters(kind) {
+  return {
+    static: true, animated: !!S.cfg.include_animated, untagged: true,
     nsfw: !!S.cfg.include_nsfw, humor: !!S.cfg.include_humor, epilepsy: true,
     ...(ART_DIMENSIONS[kind] ? { dimensions: ART_DIMENSIONS[kind].filter(value =>
       !['grid', 'wide'].includes(kind) || !['512x512', '1024x1024'].includes(value)) } : {}),
-    ...(defaultsOnly ? {} : S.cfg.artwork_filters?.[kind]) };
+  };
 }
 
 function pickerFilters(kind, row = S.modal?.row) {
-  return { ...savedPickerFilters(kind), ...(row?.source === 'desktop' ? { static: true, animated: false } : {}) };
+  return { ...defaultPickerFilters(kind), ...S.cfg.artwork_filters, ...S.modal?.typeFilters?.[kind],
+    ...(row?.source === 'desktop' ? { static: true, animated: false } : {}) };
 }
 
-function collectSavedPickerFilters(kind, inputs) {
-  inputs = [...inputs];
-  const next = { ...(S.cfg.artwork_filters?.[kind] || {}) };
-  for (const input of inputs) {
-    if (input.disabled) continue;
-    const field = input.dataset.filter;
-    if (['styles', 'mimes', 'dimensions'].includes(field)) {
-      next[field] = inputs.filter(node => node.dataset.filter === field && node.checked).map(node => node.value);
-    } else next[field] = input.checked;
-  }
-  return next;
-}
+const TYPE_ART_FILTERS = ['styles', 'mimes', 'dimensions'];
 
 function artworkCacheKey(m) {
   return `${m.sgdbId}:${m.tab}:${JSON.stringify(pickerFilters(m.tab))}`;
@@ -1985,17 +1977,26 @@ function renderArtFilters() {
     if (!inputs.some(input => input.checked) && ['static', 'animated'].includes(event.target.dataset.filter)) {
       inputs.find(input => input !== event.target).checked = true;
     }
-    const next = collectSavedPickerFilters(kind, host.querySelectorAll('input'));
-    const sizes = $('[data-size-count]', host);
-    if (sizes) sizes.textContent = `${next.dimensions.length} selected`;
-    await savePatch({ artwork_filters: { ...S.cfg.artwork_filters, [kind]: next } });
+    const field = event.target.dataset.filter;
+    if (TYPE_ART_FILTERS.includes(field)) {
+      const selected = inputs.filter(input => input.checked).map(input => input.value);
+      (m.typeFilters[kind] ||= {})[field] = selected;
+      const sizes = $('[data-size-count]', host);
+      if (sizes && field === 'dimensions') sizes.textContent = `${selected.length} selected`;
+    } else {
+      const shared = $$('input:not(:disabled)', host).filter(input => !TYPE_ART_FILTERS.includes(input.dataset.filter));
+      await savePatch({ artwork_filters: { ...S.cfg.artwork_filters,
+        ...Object.fromEntries(shared.map(input => [input.dataset.filter, input.checked])) } });
+    }
     if (S.modal !== m || m.tab !== kind) return;
     await loadArtTabs();
   })();
   $('#art-filter-reset').onclick = handleAction('Reset filters', async () => {
-    const filters = { ...S.cfg.artwork_filters };
-    delete filters[kind];
+    const filters = m.row.source === 'desktop'
+      ? Object.fromEntries(Object.entries(S.cfg.artwork_filters || {}).filter(([field]) => ['static', 'animated'].includes(field)))
+      : {};
     await savePatch({ artwork_filters: filters });
+    delete m.typeFilters[kind];
     if (S.modal !== m || m.tab !== kind) return;
     renderArtFilters();
     await loadArtTabs();
@@ -2015,6 +2016,8 @@ async function openArtModal(row, focusKind) {
     stock: {},
     sel: { ...(row.art || {}) },
     initialLogoPosition: row.logoPosition,
+    finderClicks: 0,
+    typeFilters: {},
     games: [],
   };
   $('#art-filters').open = false;
@@ -2451,7 +2454,7 @@ async function loadArtTabs(more = false) {
           const urls = new Set(page.items.map(item => item.url));
           page.items.push(...items.filter(item => !urls.has(item.url)));
           page.next++;
-          page.more = items.length === 30;
+          page.more = items.length === ART_PAGE_SIZE;
         }).finally(() => { page.pending = null; });
     }
     await page.pending;
@@ -2495,35 +2498,76 @@ async function stockArtwork(m, kind) {
   return m.stock[kind];
 }
 
-async function suggestArtwork(row, art, sgdbId, sgdbName) {
+const FINDER_MAX_PAGES = 5;
+const finderArtworkKey = item => item.id || item.url;
+
+async function finderChoice({ sgdbId, kind, filters, previous, expand, allowAnimation = true }) {
+  const filterKey = JSON.stringify(filters);
+  const cached = previous?.filterKey === filterKey ? previous : null;
+  const pool = new Map(cached?.pool);
+  const seen = new Set(cached?.seen);
+  let query = cached?.query || filters;
+  let nextPage = cached ? cached.nextPage : 0;
+  const currentKey = previous && finderArtworkKey(previous.item);
+  const loadPage = async page => {
+    const images = await window.api.artList({ sgdbId, kind, page, filters: query });
+    for (const image of images) if (image.url) pool.set(finderArtworkKey(image), image);
+    nextPage = images.length === ART_PAGE_SIZE && page + 1 < FINDER_MAX_PAGES ? page + 1 : null;
+  };
+  if (!cached || (expand && nextPage !== null)) await loadPage(nextPage);
+  const hasAlternative = () => [...pool.keys()].some(key => key !== currentKey);
+  if (JSON.stringify(query) === filterKey && nextPage === null && !hasAlternative()) {
+    const defaults = defaultPickerFilters(kind);
+    const relaxed = { ...filters, styles: undefined, mimes: undefined, dimensions: defaults.dimensions };
+    if (JSON.stringify(relaxed) !== filterKey) {
+      query = relaxed;
+      await loadPage(0);
+    }
+    if (nextPage === null && !hasAlternative() && (filters.static === false || (allowAnimation && !filters.animated))) {
+      query = { ...relaxed, static: true, animated: allowAnimation };
+      await loadPage(0);
+    }
+  }
+  const alternatives = [...pool.values()].filter(image => finderArtworkKey(image) !== currentKey);
+  const unseen = alternatives.filter(image => !seen.has(finderArtworkKey(image)));
+  if (!unseen.length && alternatives.length) seen.clear();
+  const options = unseen.length ? unseen : alternatives;
+  const index = previous ? Math.floor(Math.random() * options.length) : 0;
+  const item = options[index] || previous?.item;
+  if (!item) return null;
+  seen.add(finderArtworkKey(item));
+  return { sgdbId, item, pool, seen, nextPage, filterKey, query };
+}
+
+async function suggestArtwork(row, art, sgdbId, sgdbName, owned, shuffle, expand) {
   const desktop = row.source === 'desktop';
   const kinds = desktop ? ['icon'] : ART_TABS.map(([kind]) => kind);
-  const missing = kinds.filter(kind => !art[kind] && !(desktop && row.iconChoice));
-  if (!missing.length) return null;
+  const targets = kinds.filter(kind => owned[kind] || (!shuffle && !art[kind] && !(desktop && row.iconChoice)));
+  if (!targets.length) return null;
   const payload = rowPayload(row);
   if (!sgdbId) {
     const { rows: [match] } = await window.api.matchAuto({ rows: [{ ...payload, query: row.query }], persist: false });
     if (!match?.sgdbId) return null;
     ({ sgdbId, sgdbName } = match);
   }
-  const choices = await Promise.allSettled(missing.map(async kind => {
-    if (desktop) {
+  const choices = await Promise.allSettled(targets.map(async kind => {
+    if (!owned[kind] && desktop) {
       const custom = desktopGameMembers(row).some(member => member.shortcut
         && member.icon && folderKey(member.icon) !== folderKey(member.exe));
       if (custom) return null;
-    } else {
+    } else if (!owned[kind]) {
       const request = { row: payload, kind, existsOnly: true };
       const current = await window.api.artCurrent(request);
       if (current && (row.source !== 'steam'
         || current.file !== (await window.api.artCurrent({ ...request, stock: true }))?.file)) return null;
     }
-    const images = await window.api.artList({ sgdbId, kind, page: 0, filters: pickerFilters(kind, row) });
-    return images.find(item => item.url);
+    const previous = owned[kind]?.sgdbId === sgdbId ? owned[kind] : null;
+    return finderChoice({ sgdbId, kind, filters: pickerFilters(kind, row), previous, expand, allowAnimation: !desktop });
   }));
   const found = {};
   const failed = [];
   choices.forEach((choice, index) => {
-    const kind = missing[index];
+    const kind = targets[index];
     if (choice.status === 'rejected') failed.push(kind);
     else if (choice.value) found[kind] = choice.value;
   });
@@ -2536,20 +2580,38 @@ async function findArtworkForGame() {
   if (!m || button.disabled || !S.cfg.api_key) return;
   const desktop = m.row.source === 'desktop';
   const id = m.sgdbId;
+  if (m.finder && m.finder.id !== id) m.finderClicks = 0;
+  const expand = ++m.finderClicks >= 3;
+  const shuffle = m.finder?.id === id;
+  const owned = Object.fromEntries(Object.entries(m.finder?.choices || {})
+    .filter(([kind, choice]) => m.sel[kind] === choice.item));
   const key = S.cfg.api_key;
   const search = m.search;
   button.disabled = true;
-  artStatus(desktop ? 'Looking for an icon…' : 'Finding artwork…');
+  artStatus(shuffle ? (desktop ? 'Shuffling the icon…' : 'Shuffling artwork…')
+    : desktop ? 'Looking for an icon…' : 'Finding artwork…');
   try {
-    const result = await suggestArtwork(m.row, m.sel, id, m.row.sgdbName);
+    const result = await suggestArtwork(m.row, m.sel, id, m.row.sgdbName, owned, shuffle, expand);
     if (S.modal !== m || S.cfg.api_key !== key || m.search !== search
       || (m.sgdbId !== id && result?.sgdbId !== m.sgdbId)) return;
-    if (!result) { artStatus(desktop ? 'No icon suggestion found.' : 'No missing artwork found.'); return; }
+    if (!result) {
+      artStatus(shuffle || Object.keys(owned).length ? 'No other suggestions for the current filters.'
+        : desktop ? 'No icon suggestion found.' : 'No missing artwork found.');
+      return;
+    }
     const failed = ART_TABS.filter(([kind]) => result.failed.includes(kind)).map(([, label]) => label.toLowerCase());
     const failure = failed.length ? `Could not check ${desktop ? 'for an icon' : failed.join(', ')}.` : '';
-    const additions = Object.keys(result.art).filter(kind => !m.sel[kind]);
+    const tracked = { ...owned };
+    const additions = [];
+    for (const [kind, choice] of Object.entries(result.art)) {
+      if (choice.filterKey !== JSON.stringify(pickerFilters(kind, m.row))) continue;
+      if (owned[kind] ? m.sel[kind] !== owned[kind].item : m.sel[kind]) continue;
+      tracked[kind] = choice;
+      if (m.sel[kind] !== choice.item) additions.push(kind);
+    }
     if (!additions.length) {
-      if (failure) artStatus(failure);
+      if (shuffle) m.finder = { id, choices: tracked };
+      artStatus(failure || 'No other suggestions for the current filters.');
       return;
     }
     if (m.sgdbId !== result.sgdbId) m.search = (m.search || 0) + 1;
@@ -2559,16 +2621,21 @@ async function findArtworkForGame() {
       m.games.push({ id: result.sgdbId, name: result.sgdbName });
     }
     $('#art-id').value = result.sgdbId;
-    for (const kind of additions) m.sel[kind] = result.art[kind];
+    for (const kind of additions) m.sel[kind] = tracked[kind].item;
+    m.finder = { id: result.sgdbId, choices: tracked };
     renderArtTabs();
+    const finishedSearch = m.search;
     await loadArtTabs();
-    if (S.modal === m) {
-      const found = desktop ? 'Icon suggestion ready.' : `Found artwork for ${additions.length} type${additions.length === 1 ? '' : 's'}.`;
+    if (S.modal === m && m.search === finishedSearch) {
+      const found = desktop ? (shuffle ? 'New icon suggestion ready.' : 'Icon suggestion ready.')
+        : `${shuffle ? 'Shuffled' : 'Found'} artwork for ${additions.length} type${additions.length === 1 ? '' : 's'}.`;
       artStatus(`${found} Save to review.${failure ? ` ${failure}` : ''}`);
     }
   } catch (error) {
     if (S.modal === m) artStatus(`${desktop ? 'Icon' : 'Artwork'} search failed. ${error.message || error}`);
-  } finally { if (S.modal === m) button.disabled = false; }
+  } finally {
+    if (S.modal === m) button.disabled = false;
+  }
 }
 
 async function renderArtManage() {
@@ -2601,13 +2668,22 @@ async function renderArtManage() {
       : choice?.reset ? await stockArtwork(m, kind)
       : choice?.file || choice?.url ? choice : await window.api.artCurrent({ row: rowPayload(m.row), kind }).catch(() => null);
     if (S.modal !== m || m.tab !== 'manage' || !cell.isConnected) return;
-    $('span', cell).textContent = choice?.reset ? 'Default artwork will be restored.'
+    const caption = $('span', cell);
+    const description = choice?.reset ? 'Default artwork will be restored.'
       : choice && !choice.appliedFile ? 'Selected artwork' : current ? 'Current artwork' : 'No custom artwork';
+    caption.textContent = current ? 'Loading preview…' : description;
     if (current) {
       const image = $('img', cell);
       const button = $('.manage-preview-open', cell);
-      image.onload = () => { button.hidden = false; };
-      image.onerror = () => { button.hidden = true; $('span', cell).textContent = 'Preview could not load.'; };
+      image.onload = () => { button.hidden = false; caption.textContent = description; };
+      image.onerror = () => {
+        if (current.url && image.getAttribute('src') !== current.url) {
+          image.src = current.url;
+          return;
+        }
+        button.hidden = true;
+        caption.textContent = 'Preview could not load.';
+      };
       button.onclick = () => openArtPreview(current.file || current.url ? current : { url: image.src }, button, kind);
       image.src = current.thumb || current.url || await localArtPreview(current.file).catch(() => null) || '';
     }
@@ -2677,7 +2753,7 @@ function renderArtGrid(loading = false, start = 0) {
     const empty = document.createElement('div');
     empty.className = 'art-load-error muted';
     empty.textContent = 'No SGDB images of this type.';
-    const defaults = savedPickerFilters(kind, true);
+    const defaults = defaultPickerFilters(kind);
     if (m.row.source === 'desktop') Object.assign(defaults, { static: true, animated: false });
     const changed = $$('#art-filter-fields input').some(input => {
       const value = defaults[input.dataset.filter];
