@@ -15,6 +15,7 @@ const strips = require('./strips');
 const sgdbMod = require('./sgdb');
 const images = require('./images');
 const { setWallpaper } = require('./wallpaper');
+const { installedScope, prepareUpdate, launchUpdate } = require('./update');
 const { createDesktop } = require('./desktop');
 const { elevateShortcut, runShortcutHelper } = require('./desktop-elevation');
 const desktop = createDesktop({ app, shell, nativeImage, elevate: (row) => elevateShortcut(app, row) });
@@ -466,6 +467,11 @@ ipcMain.handle('cover:cache-put', (_e, req) => {
 
 ipcMain.handle('shell:open', (_e, p) => shell.openPath(p));
 ipcMain.handle('util:open-url', (_e, url) => shell.openExternal(url));
+const releasesUrl = 'https://github.com/Kirkland-Pickles/Shammes/releases';
+let pendingUpdate;
+let updating = false;
+let updateDirectory;
+let stagedInstaller;
 ipcMain.handle('util:check-update', async () => {
   try {
     const response = await fetch('https://api.github.com/repos/Kirkland-Pickles/shammes/releases/latest', {
@@ -473,13 +479,57 @@ ipcMain.handle('util:check-update', async () => {
       signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) return null;
-    const latest = (await response.json()).tag_name;
+    const { tag_name: latest, body, assets } = await response.json();
     const parse = value => /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value || '');
-    const available = parse(latest), current = parse(app.getVersion());
+    const currentVersion = app.getVersion();
+    const available = parse(latest), current = parse(currentVersion);
     if (!available || !current || available[4]) return null;
     const order = available.slice(1, 4).join('.').localeCompare(current.slice(1, 4).join('.'), 'en', { numeric: true });
-    return order > 0 || (order === 0 && current[4]) ? latest : null;
+    if (order < 0 || (order === 0 && !current[4])) return null;
+    const version = available.slice(1, 4).join('.');
+    const installer = assets?.find(({ name }) => [
+      `Shammes-windows-x64-${version}.exe`, `Shammes.Setup.${version}.exe`, `Shammes Setup ${version}.exe`,
+    ].includes(name));
+    const scope = app.isPackaged && process.platform === 'win32' && process.arch === 'x64' && await installedScope(process.execPath);
+    const canInstall = Boolean(scope && Number.isSafeInteger(installer?.size) && installer.size > 0
+      && /^sha256:[a-f0-9]{64}$/.test(installer.digest));
+    pendingUpdate = canInstall ? { scope, size: installer.size, digest: installer.digest,
+      url: `${releasesUrl}/download/${latest}/${encodeURIComponent(installer.name)}` } : null;
+    return { version: latest, currentVersion, notes: body || '', canInstall, url: `${releasesUrl}/tag/${latest}` };
   } catch { return null; }
+});
+ipcMain.handle('util:download-update', async (event) => {
+  const update = pendingUpdate;
+  if (!update || updating) throw new Error('The update is unavailable.');
+  if (stagedInstaller) return;
+  updating = true;
+  const notify = percent => {
+    if (!event.sender.isDestroyed()) event.sender.send('update:progress', percent);
+  };
+  try {
+    updateDirectory = await fs.promises.mkdtemp(path.join(app.getPath('temp'), 'shammes-update-'));
+    stagedInstaller = await prepareUpdate(update, updateDirectory, notify);
+  } catch (error) {
+    if (updateDirectory) await fs.promises.rm(updateDirectory, { recursive: true, force: true }).catch(() => {});
+    updateDirectory = undefined;
+    throw error;
+  } finally { updating = false; }
+});
+ipcMain.handle('util:install-update', async () => {
+  if (!stagedInstaller || updating) throw new Error('The update is unavailable.');
+  if (steamWriteBusy || desktopJob) throw new Error('Wait for your changes to finish before updating.');
+  updating = true;
+  try {
+    await launchUpdate(stagedInstaller, pendingUpdate.scope);
+    updateDirectory = undefined;
+    app.quit();
+  } catch (error) {
+    updating = false;
+    throw error;
+  }
+});
+app.on('will-quit', () => {
+  if (updateDirectory) try { fs.rmSync(updateDirectory, { recursive: true, force: true }); } catch {}
 });
 
 // ------------------------------------------------------------------ scan

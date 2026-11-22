@@ -193,7 +193,7 @@ button.game-open:hover:not(:disabled) { border-color: transparent; background: t
 #statusbar { display: flex; align-items: center; gap: 12px; padding: 5px 26px; color: var(--muted); font-size: 8.5pt; }
 #status { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dock-toggle { min-height: 27px; padding: 0 5px; border: 0; color: var(--muted); background: transparent; font-size: 8.5pt; }
-#update-available { color: var(--accent); }
+#update-available { color: var(--accent); -webkit-app-region: no-drag; }
 
 /* Confirmation, picker and executable dialogs */
 #toast { position: fixed; z-index: 200; bottom: 46px; left: 50%; max-width: min(560px, 84vw); padding: 10px 14px; transform: translate(-50%, 10px); border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-raised); box-shadow: var(--menu-shadow); opacity: 0; pointer-events: none; transition: opacity .2s var(--ease), transform .24s var(--ease); }
@@ -345,6 +345,22 @@ button.game-open:hover:not(:disabled) { border-color: transparent; background: t
 #preferences .icon, .key-eye .icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
 #page-review, #page-add, #steam-setup, #library-intro, #wallpaper-options { position: fixed; inset: 0; margin: auto; padding: 22px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: var(--fg); width: min(620px, 90vw); max-height: 86vh; }
 #wallpaper-options { width: min(424px, 90vw); }
+#update-dialog { position: fixed; inset: 0; margin: auto; width: min(640px, 90vw); max-height: 82vh; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: var(--fg); box-shadow: var(--dialog-shadow); }
+#update-dialog::backdrop { background: var(--scrim); }
+.update-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 18px; max-height: 82vh; padding: 24px; }
+.update-header, .update-footer { display: flex; align-items: center; gap: 12px; }
+.update-header { justify-content: space-between; }
+#update-close { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; }
+#update-title { font-size: 18pt; }
+#update-title:focus { outline: none; }
+#update-version { margin-top: 4px; color: var(--muted); }
+#update-notes { overflow: auto; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); line-height: 1.65; }
+#update-notes h3 { margin-bottom: 4px; font-size: 11pt; }
+#update-notes h3:not(:first-child) { margin-top: 16px; }
+#update-notes ul { padding-left: 20px; }
+#update-release { margin-right: auto; }
+#update-status { color: var(--muted); }
+#update-progress { display: block; width: 100%; height: 6px; margin-bottom: 12px; accent-color: var(--accent); }
 #wallpaper-form { display: grid; gap: 12px; }
 #wallpaper-options h2 { font-size: 14pt; }
 .wallpaper-sample { position: relative; justify-self: center; overflow: hidden; background: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--border); }

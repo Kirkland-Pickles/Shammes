@@ -19,7 +19,7 @@
 <header id="app-header">
   <div class="title-row">
     <div class="brand"><img src="../assets/app-icon.svg" alt=""><span>Shammes</span><span class="app-version">v1.1.2</span></div>
-
+    <button class="text-btn" id="update-available" type="button" hidden>Update available</button>
   </div>
 
 </header>
@@ -64,6 +64,23 @@
     <p id="library-intro-copy">Pick a game in your Steam library to change its artwork. Add a key to browse SteamGridDB, or use your own images.</p>
     <div id="intro-key"></div>
     <div class="modal-foot"><button class="text-btn" id="intro-add-folders" type="button">Add games folder</button><span class="spacer"></span><button class="btn" id="intro-continue" type="button">Open library</button></div>
+  </dialog>
+  <dialog id="update-dialog" aria-labelledby="update-title" aria-describedby="update-version">
+    <section class="update-screen">
+      <header class="update-header">
+        <div><h1 id="update-title" tabindex="-1" autofocus>Update available</h1><p id="update-version"></p></div>
+        <form method="dialog"><button class="text-btn" id="update-close" aria-label="Close update dialog"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8"/></svg></button></form>
+      </header>
+      <div id="update-notes" tabindex="0" aria-label="Release notes"></div>
+      <footer>
+        <progress id="update-progress" max="100" aria-label="Update download progress" hidden></progress>
+        <div class="update-footer">
+          <button class="text-btn" id="update-release" type="button">View release</button>
+          <span id="update-status" role="status"></span>
+          <button class="btn primary" id="update-install" type="button" hidden>Download update</button>
+        </div>
+      </footer>
+    </section>
   </dialog>
   <dialog closedby="any" id="page-add" aria-labelledby="add-title">
     <header class="library-head"><h1 id="add-title">Add games folder</h1><button class="btn sm" id="close-add">Close</button></header>
@@ -137,7 +154,7 @@
     <button class="text-btn" id="btn-prune">Remove missing games</button>
     <button class="text-btn" id="btn-clear">Discard unapplied changes</button>
   </div>
-  <button class="dock-toggle" id="update-available" type="button" hidden>Update available</button><button class="dock-toggle" id="dock-toggle" type="button" aria-expanded="false" aria-controls="log">Show log</button>
+  <button class="dock-toggle" id="dock-toggle" type="button" aria-expanded="false" aria-controls="log">Show log</button>
 </footer>
 </div>
 

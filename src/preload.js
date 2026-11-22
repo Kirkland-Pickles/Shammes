@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld('api', {
   shellOpen: (p) => ipcRenderer.invoke('shell:open', p),
   openUrl: (url) => ipcRenderer.invoke('util:open-url', url),
   checkUpdate: () => ipcRenderer.invoke('util:check-update'),
+  downloadUpdate: () => ipcRenderer.invoke('util:download-update'),
+  installUpdate: () => ipcRenderer.invoke('util:install-update'),
+  onUpdateProgress: (fn) => ipcRenderer.on('update:progress', (_event, percent) => fn(percent)),
   // sgdb
   keyValidate: (key) => ipcRenderer.invoke('key:validate', key),
   sgdbSearch: (q) => ipcRenderer.invoke('sgdb:search', q),

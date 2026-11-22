@@ -3068,14 +3068,66 @@ async function saveSteamLauncher() {
   return true;
 }
 
+function offerUpdate(update) {
+  if (!update) return;
+  const dialog = $('#update-dialog');
+  const button = $('#update-available');
+  const notes = $('#update-notes');
+  $('#update-version').textContent = `v${update.currentVersion} → ${update.version}`;
+  let list;
+  for (const line of update.notes.split(/\r?\n/).map(line => line.trim())) {
+    if (/^[-*] /.test(line)) {
+      if (!list) list = notes.appendChild(document.createElement('ul'));
+      list.appendChild(document.createElement('li')).textContent = line.slice(2);
+      continue;
+    }
+    list = null;
+    if (!line || /^(?:\[|\*\*)?full changelog\b/i.test(line)) continue;
+    const heading = /^#{1,6} +(.+)$/.exec(line);
+    notes.appendChild(document.createElement(heading ? 'h3' : 'p')).textContent = heading?.[1] || line;
+  }
+  if (!notes.childElementCount) notes.textContent = 'Release notes are available on GitHub.';
+  $('#update-release').onclick = handleAction('Open release', () => window.api.openUrl(update.url));
+  const install = $('#update-install');
+  const close = $('#update-close');
+  const status = $('#update-status');
+  const progress = $('#update-progress');
+  let ready = false;
+  install.hidden = !update.canInstall;
+  dialog.oncancel = event => { if (close.disabled) event.preventDefault(); };
+  if (update.canInstall) window.api.onUpdateProgress(percent => {
+    progress.value = percent;
+    if (!progress.hidden) status.textContent = `Downloading… ${percent}%`;
+  });
+  install.onclick = async () => {
+    install.disabled = true;
+    close.disabled = ready;
+    status.textContent = ready ? 'Restarting Shammes…' : 'Downloading…';
+    try {
+      if (ready) {
+        await window.api.installUpdate();
+      } else {
+        progress.value = 0;
+        progress.hidden = false;
+        await window.api.downloadUpdate();
+        ready = true;
+        install.textContent = 'Restart to update';
+        status.textContent = '';
+      }
+    } catch (error) {
+      status.textContent = String(error.message || error).replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '');
+    } finally {
+      progress.hidden = true;
+      install.disabled = close.disabled = false;
+    }
+  };
+  button.hidden = false;
+  button.onclick = () => dialog.showModal();
+  if (!S.modal && !$('dialog[open]')) dialog.showModal();
+}
+
 async function boot() {
-  window.api.checkUpdate?.().then(version => {
-    if (!version) return;
-    const button = $('#update-available');
-    button.textContent = `${version} available`;
-    button.hidden = false;
-    button.onclick = () => window.api.openUrl('https://github.com/Kirkland-Pickles/shammes/releases/latest');
-  }).catch(() => {});
+  const update = window.api.checkUpdate?.().catch(() => null);
   S.cfg = await window.api.cfgGet();
   const showIntro = !S.cfg.library_intro_seen && !S.cfg.steam_path && !S.cfg.api_key
     && !S.cfg.games_roots?.length && libraryView() === 'library';
@@ -3093,6 +3145,7 @@ async function boot() {
     $('#intro-key').append(keyCard());
     $('#library-intro').showModal();
   }
+  update?.then(offerUpdate);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
