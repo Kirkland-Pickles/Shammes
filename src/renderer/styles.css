@@ -96,7 +96,7 @@ h1, h2, h3 { min-width: 0; overflow-wrap: break-word; text-wrap: balance; }
 #center { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; }
 #pages { position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
 .page { display: none; position: relative; flex: 1; min-width: 0; min-height: 0; flex-direction: column; gap: 14px; overflow: auto; padding: 25px 28px 18px; }
-.page.library-page { gap: 8px; padding-top: 14px; }
+.page.library-page { gap: 8px; padding-top: 4px; }
 .page.on { display: flex; }
 .page h1 { font-size: 23pt; font-weight: 620; line-height: 1.1; letter-spacing: -.025em; }
 .library-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex: 0 0 auto; }
