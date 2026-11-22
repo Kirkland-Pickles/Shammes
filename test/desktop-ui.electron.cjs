@@ -69,6 +69,8 @@ async function steamArtwork() {
   await check('Steam artwork Review', {
     games: [{ appid: 42, name: 'Fixture game' }],
     handlers: {
+      'sgdb:search': () => [{ id: 17, name: 'Game' }, { id: 42, name: 'Different game' }],
+      'art:list': ({ sgdbId }) => sgdbId === 42 ? [preview] : [{ ...preview, id: 8, url: image + '#first-match' }],
       'art:wallpaper-available': () => ({ width: 1920, height: 1080 }),
       'art:set-wallpaper': (...args) => { wallpaper = args; },
       'art:thumbnail': () => appliedCover,
@@ -89,6 +91,12 @@ async function steamArtwork() {
     await wait("document.querySelector('#games .game-open') !== null");
     await click('#games .game-open');
     await wait("document.querySelector('#art-grid .thumb-select') !== null");
+    await run("document.querySelector('#art-q').value = 'Different game'");
+    await click('#art-search');
+    await wait("!document.querySelector('#art-matches').hidden");
+    await click('#art-matches .choice-list [data-index="1"]');
+    await wait("document.querySelector('#art-id').value === '42' && document.querySelector('#art-status').textContent.startsWith('Different game:')");
+    assert.equal(await run("document.querySelector('#art-matches').hidden"), true);
     await click('#art-grid .thumb-select');
     await click('#art-view-full');
     await wait("!document.querySelector('#art-preview-wallpaper').disabled");
@@ -110,6 +118,7 @@ async function steamArtwork() {
     await wait("document.querySelector('#art-overlay').hidden");
     assert.equal(applied, undefined);
     assert.equal(drafts['steam:42'].art.grid.url, preview.url);
+    assert.equal(drafts['steam:42'].sgdbId, 42);
     await click('#btn-add');
     await wait("document.querySelector('#page-review').open");
     assert.equal(await run("document.querySelectorAll('.review-row input:checked').length"), 1);

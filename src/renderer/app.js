@@ -120,8 +120,9 @@ function flyToastToLog(t) {
   t.classList.remove('show');
 }
 
-function toast(msg, logEntry) {
+function toast(msg, logEntry, success = false) {
   const t = $('#toast');
+  t.classList.toggle('success', success);
   const dialog = $$('dialog[open]').at(-1);
   const host = dialog || document.body;
   if (t.parentElement !== host) host.appendChild(t);
@@ -132,7 +133,7 @@ function toast(msg, logEntry) {
   t._h = setTimeout(() => t.classList.remove('show'), 3200);
   t.classList.add('show');
   const dock = $('#bottomdock');
-  if (!dialog && dock?.classList.contains('collapsed') && logEntry?.textContent.endsWith(`] ${msg}`)) {
+  if (!success && !dialog && dock?.classList.contains('collapsed') && logEntry?.textContent.endsWith(`] ${msg}`)) {
     t._fly = setTimeout(() => {
       if (logEntry.isConnected) flyToastToLog(t);
     }, TOAST_FLIGHT_DELAY);
@@ -796,8 +797,10 @@ function renderChoiceList(pick) {
     const changed = index !== pick.selectedIndex;
     pick.selectedIndex = index;
     const choices = pick.closest('.launcher-candidates');
-    choices.open = false;
-    $('summary', choices).focus();
+    if (choices) {
+      choices.open = false;
+      $('summary', choices).focus();
+    }
     if (changed) pick.dispatchEvent(new Event('change', { bubbles: true }));
   };
   list.onkeydown = event => {
@@ -2114,7 +2117,7 @@ async function closeArtModal(save, remind = false) {
   if (save) {
     if (m.row.source === 'desktop') {
       renderDesktop();
-      if (remind && reviewCandidates('desktop').length) toast('Ready to review');
+      if (remind) toast('Choices saved.', undefined, true);
       restoreArtFocus(m);
       return;
     }
@@ -2130,7 +2133,7 @@ async function closeArtModal(save, remind = false) {
     if (artworkChanged) m.row.pendingArt = true;
     S.cardArtCache.delete(coverToken(m.row));
     renderRows();
-    if (remind && reviewCandidates('library').length) toast('Ready to review');
+    if (remind) toast('Choices saved.', undefined, true);
     log(`'${m.row.display}': artwork selection updated.`);
   }
   restoreArtFocus(m);
@@ -2447,7 +2450,8 @@ async function loadArtTabs(more = false) {
     }
     await page.pending;
     if (S.modal !== m || artworkCacheKey(m) !== key) return;
-    artStatus(`SGDB ${sgdbId}: ${page.items.length} images. Select an image.`);
+    const name = m.games?.find(game => game.id === sgdbId)?.name || `SGDB ${sgdbId}`;
+    artStatus(`${name}: ${page.items.length} images. Select an image.`);
     renderArtGrid(false, start);
   } catch (e) {
     if (S.modal !== m || artworkCacheKey(m) !== key) return;
@@ -2729,8 +2733,7 @@ function artThumb(im, label = '', selection = im) {
 
 function pickArt(kind, item) {
   S.modal.sel[kind] = item.file ? { file: item.file, appliedFile: item.appliedFile } : item;
-  artStatus(item.id ? `${kind}: selected #${item.id} by ${item.author}.`
-    : `${kind}: ${item.file ? 'local file' : 'custom URL'} set.`);
+  artStatus(`${modalTabs().find(([tab]) => tab === kind)?.[1] || kind} saved.`);
   renderArtTabs();
 }
 
@@ -2905,8 +2908,9 @@ function wireToolbar() {
   const artGames = $('#art-games');
   artGames.addEventListener('change', async (e) => {
     const m = S.modal;
-    const g = (m.games || []).find((x) => String(x.id) === e.target.value);
+    const g = m?.games?.find((x) => String(x.id) === e.target.value);
     if (g) {
+      renderChoiceList(artGames);
       m.search = (m.search || 0) + 1;
       if (!S.cfg.api_key) { m.stock = {}; m.steamId = g.id; await loadArtTabs(); return; }
       m.matchSource = 'manual';
@@ -3324,6 +3328,8 @@ function closeReview(remember = true) {
   if (!S.review) return;
   S.reviewReturn = remember ? S.review.destination : null;
   S.review = null;
+  const feedback = $('#toast');
+  if ($('#page-review').contains(feedback)) document.body.append(feedback);
   $('#page-review').close();
 }
 function dismissTopPopup() {

@@ -198,6 +198,8 @@ button.game-open:hover:not(:disabled) { border-color: transparent; background: t
 /* Confirmation, picker and executable dialogs */
 #toast { position: fixed; z-index: 200; bottom: 46px; left: 50%; max-width: min(560px, 84vw); padding: 10px 14px; transform: translate(-50%, 10px); border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-raised); box-shadow: var(--menu-shadow); opacity: 0; pointer-events: none; transition: opacity .2s var(--ease), transform .24s var(--ease); }
 #toast.show { transform: translate(-50%, 0); opacity: 1; }
+#toast.success { display: flex; align-items: center; gap: 10px; }
+#toast.success::before { content: '✓'; color: var(--green); font-weight: 650; }
 .toast-ghost { position: fixed; z-index: 201; max-width: none; margin: 0; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--fg); background: var(--panel-raised); box-shadow: var(--menu-shadow); font: inherit; pointer-events: none; will-change: transform, opacity; }
 #confirm-overlay { position: fixed; z-index: 150; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: var(--scrim); }
 #confirm-box { width: min(470px, 92vw); max-height: 80vh; overflow: auto; padding: 22px; border-radius: var(--radius); background: var(--panel); box-shadow: var(--dialog-shadow); }
@@ -259,6 +261,7 @@ button.game-open:hover:not(:disabled) { border-color: transparent; background: t
 .thumb-select { display: block; width: 100%; min-height: 0; overflow: hidden; padding: 5px; border: 1px solid var(--line); background: var(--bg); text-align: left; }
 .thumb-select:hover:not(:disabled) { border-color: var(--accent); background: var(--bg); }
 .thumb.picked .thumb-select { border-color: var(--accent); }
+.thumb.picked .thumb-select::after { content: ''; position: absolute; top: 9px; right: 9px; width: 8px; height: 8px; border: 1px solid var(--bg); border-radius: 50%; background: var(--accent); pointer-events: none; }
 .thumb-image { position: relative; }
 .thumb img { display: block; width: 100%; max-height: 250px; object-fit: contain; background: var(--panel-raised); }
 .thumb .meta { display: block; margin-top: 6px; color: var(--muted); font-size: 8pt; line-height: 1.4; }
