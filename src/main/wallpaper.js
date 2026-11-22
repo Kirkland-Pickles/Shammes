@@ -1,6 +1,6 @@
 'use strict';
 const { execFile } = require('node:child_process');
-const { createHash } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { promisify } = require('node:util');
@@ -52,9 +52,18 @@ async function setWallpaper(folder, jpeg, fit = 'fill') {
   const hash = createHash('sha256').update(jpeg).digest('hex').slice(0, 16);
   const file = path.join(folder, `Artwork-${hash}.jpg`);
   await fs.mkdir(folder, { recursive: true });
-  await fs.writeFile(file, jpeg, { flag: 'wx' }).catch(error => {
-    if (error.code !== 'EEXIST') throw error;
+  const existing = await fs.stat(file).catch(error => {
+    if (error.code !== 'ENOENT') throw error;
   });
+  if (existing?.size !== jpeg.length) {
+    const temporary = `${file}.${randomUUID()}.tmp`;
+    try {
+      await fs.writeFile(temporary, jpeg, { flag: 'wx' });
+      await fs.rename(temporary, file);
+    } finally {
+      await fs.rm(temporary, { force: true }).catch(() => {});
+    }
+  }
   await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command',
     `$ErrorActionPreference = 'Stop'\n${wallpaperInterop}\n[DesktopWallpaper]::Set($env:SHAMMES_WALLPAPER, ${positions[fit]})`], {
     env: { ...process.env, SHAMMES_WALLPAPER: file }, windowsHide: true, timeout: 20000,
