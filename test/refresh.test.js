@@ -437,6 +437,18 @@ it('shuffles later artwork pages without repeating or replacing manual choices',
   assert.deepEqual(pages, [[7, 0], [7, 1], [8, 0]]);
 });
 
+it('finds another Windows icon after a manual pick', async () => {
+  const manual = { id: 1, url: 'manual' };
+  const alternative = { id: 2, url: 'alternative' };
+  const { context, state } = renderer({ artList: async () => [manual, alternative] });
+  vm.runInContext('renderArtTabs = () => {}; loadArtTabs = async () => {};', context);
+  state.cfg = { api_key: 'fixture' };
+  const modal = state.modal = { sgdbId: 7, row: { source: 'desktop', iconChoice: manual }, games: [],
+    finderClicks: 0, sel: { icon: manual } };
+  await vm.runInContext('findArtworkForGame()', context);
+  assert.equal(modal.sel.icon, alternative);
+});
+
 it('loosens finder filters after empty results while keeping content restrictions', async () => {
   const requests = [];
   const { context, state } = renderer({ artList: async ({ filters }) => {

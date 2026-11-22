@@ -120,9 +120,8 @@ function flyToastToLog(t) {
   t.classList.remove('show');
 }
 
-function toast(msg, logEntry, success = false) {
+function toast(msg, logEntry) {
   const t = $('#toast');
-  t.classList.toggle('success', success);
   const dialog = $$('dialog[open]').at(-1);
   const host = dialog || document.body;
   if (t.parentElement !== host) host.appendChild(t);
@@ -133,7 +132,7 @@ function toast(msg, logEntry, success = false) {
   t._h = setTimeout(() => t.classList.remove('show'), 3200);
   t.classList.add('show');
   const dock = $('#bottomdock');
-  if (!success && !dialog && dock?.classList.contains('collapsed') && logEntry?.textContent.endsWith(`] ${msg}`)) {
+  if (!dialog && dock?.classList.contains('collapsed') && logEntry?.textContent.endsWith(`] ${msg}`)) {
     t._fly = setTimeout(() => {
       if (logEntry.isConnected) flyToastToLog(t);
     }, TOAST_FLIGHT_DELAY);
@@ -2126,7 +2125,7 @@ async function closeArtModal(save, remind = false) {
   if (save) {
     if (m.row.source === 'desktop') {
       renderDesktop();
-      if (remind) toast('Choices saved.', undefined, true);
+      if (remind && reviewCandidates('desktop').length) toast('Ready to review');
       restoreArtFocus(m);
       return;
     }
@@ -2142,7 +2141,7 @@ async function closeArtModal(save, remind = false) {
     if (artworkChanged) m.row.pendingArt = true;
     S.cardArtCache.delete(coverToken(m.row));
     renderRows();
-    if (remind) toast('Choices saved.', undefined, true);
+    if (remind && reviewCandidates('library').length) toast('Ready to review');
     log(`'${m.row.display}': artwork selection updated.`);
   }
   restoreArtFocus(m);
@@ -2501,14 +2500,14 @@ async function stockArtwork(m, kind) {
 const FINDER_MAX_PAGES = 5;
 const finderArtworkKey = item => item.id || item.url;
 
-async function finderChoice({ sgdbId, kind, filters, previous, expand, allowAnimation = true }) {
+async function finderChoice({ sgdbId, kind, filters, previous, current = previous?.item, expand, allowAnimation = true }) {
   const filterKey = JSON.stringify(filters);
   const cached = previous?.filterKey === filterKey ? previous : null;
   const pool = new Map(cached?.pool);
   const seen = new Set(cached?.seen);
   let query = cached?.query || filters;
   let nextPage = cached ? cached.nextPage : 0;
-  const currentKey = previous && finderArtworkKey(previous.item);
+  const currentKey = current && finderArtworkKey(current);
   const loadPage = async page => {
     const images = await window.api.artList({ sgdbId, kind, page, filters: query });
     for (const image of images) if (image.url) pool.set(finderArtworkKey(image), image);
@@ -2542,7 +2541,7 @@ async function finderChoice({ sgdbId, kind, filters, previous, expand, allowAnim
 async function suggestArtwork(row, art, sgdbId, sgdbName, owned, shuffle, expand) {
   const desktop = row.source === 'desktop';
   const kinds = desktop ? ['icon'] : ART_TABS.map(([kind]) => kind);
-  const targets = kinds.filter(kind => owned[kind] || (!shuffle && !art[kind] && !(desktop && row.iconChoice)));
+  const targets = kinds.filter(kind => desktop || owned[kind] || (!shuffle && !art[kind]));
   if (!targets.length) return null;
   const payload = rowPayload(row);
   if (!sgdbId) {
@@ -2551,18 +2550,15 @@ async function suggestArtwork(row, art, sgdbId, sgdbName, owned, shuffle, expand
     ({ sgdbId, sgdbName } = match);
   }
   const choices = await Promise.allSettled(targets.map(async kind => {
-    if (!owned[kind] && desktop) {
-      const custom = desktopGameMembers(row).some(member => member.shortcut
-        && member.icon && folderKey(member.icon) !== folderKey(member.exe));
-      if (custom) return null;
-    } else if (!owned[kind]) {
+    if (!desktop && !owned[kind]) {
       const request = { row: payload, kind, existsOnly: true };
       const current = await window.api.artCurrent(request);
       if (current && (row.source !== 'steam'
         || current.file !== (await window.api.artCurrent({ ...request, stock: true }))?.file)) return null;
     }
     const previous = owned[kind]?.sgdbId === sgdbId ? owned[kind] : null;
-    return finderChoice({ sgdbId, kind, filters: pickerFilters(kind, row), previous, expand, allowAnimation: !desktop });
+    const current = desktop ? art[kind] || row.iconChoice : previous?.item;
+    return finderChoice({ sgdbId, kind, filters: pickerFilters(kind, row), previous, current, expand, allowAnimation: !desktop });
   }));
   const found = {};
   const failed = [];
@@ -2585,13 +2581,14 @@ async function findArtworkForGame() {
   const shuffle = m.finder?.id === id;
   const owned = Object.fromEntries(Object.entries(m.finder?.choices || {})
     .filter(([kind, choice]) => m.sel[kind] === choice.item));
+  const selected = { ...m.sel };
   const key = S.cfg.api_key;
   const search = m.search;
   button.disabled = true;
   artStatus(shuffle ? (desktop ? 'Shuffling the icon…' : 'Shuffling artwork…')
     : desktop ? 'Looking for an icon…' : 'Finding artwork…');
   try {
-    const result = await suggestArtwork(m.row, m.sel, id, m.row.sgdbName, owned, shuffle, expand);
+    const result = await suggestArtwork(m.row, selected, id, m.row.sgdbName, owned, shuffle, expand);
     if (S.modal !== m || S.cfg.api_key !== key || m.search !== search
       || (m.sgdbId !== id && result?.sgdbId !== m.sgdbId)) return;
     if (!result) {
@@ -2605,7 +2602,7 @@ async function findArtworkForGame() {
     const additions = [];
     for (const [kind, choice] of Object.entries(result.art)) {
       if (choice.filterKey !== JSON.stringify(pickerFilters(kind, m.row))) continue;
-      if (owned[kind] ? m.sel[kind] !== owned[kind].item : m.sel[kind]) continue;
+      if (m.sel[kind] !== selected[kind]) continue;
       tracked[kind] = choice;
       if (m.sel[kind] !== choice.item) additions.push(kind);
     }
