@@ -68,6 +68,7 @@ function createWindow() {
 }
 
 // ---------------------------------------------------------------- config
+ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('cfg:get', () => cfg);
 ipcMain.handle('steam:drafts-save', (_e, { scope, updates }) => {
   const currentScope = JSON.stringify([store.folderKey(cfg.steam_path), String(cfg.steam_user_id || '')]);

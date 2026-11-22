@@ -14,6 +14,7 @@ async function check(name, options, scenario) {
   let cfg = { ...structuredClone(DEFAULTS), library_intro_seen: true, api_key: 'fixture',
     steam_path: 'C:/Steam', steam_user_id: '1', games_roots: ['C:/Games'], ...options.cfg };
   const handlers = {
+    'app:version': () => '9.8.7',
     'cfg:get': () => cfg,
     'cfg:set': patch => (cfg = { ...cfg, ...patch }),
     'steam:detect': () => ({ path: cfg.steam_path, users: [{ id: '1', name: 'Fixture' }] }),
@@ -52,6 +53,7 @@ async function check(name, options, scenario) {
   try {
     await win.loadFile(path.join(__dirname, '../src/renderer/index.html'));
     await wait("!document.querySelector('#page-nav').hidden");
+    await wait("document.querySelector('.app-version').textContent === 'v9.8.7'");
     await scenario({ run, click, wait, config: () => cfg });
     console.log(name + ' passed');
   } catch (error) {

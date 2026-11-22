@@ -25,6 +25,22 @@ jobs:
           node-version: lts/*
           cache: npm
 
+      - name: Check release version
+        id: version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $lock = Get-Content package-lock.json -Raw | ConvertFrom-Json -AsHashtable
+          if ($lock.version -ne $version -or $lock.packages[''].version -ne $version) {
+            throw "package.json and package-lock.json versions differ."
+          }
+          if ($env:RELEASE_TAG -cne "v$version") {
+            throw "Release tag must be v$version."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
       - name: Install dependencies
         run: npm.cmd ci
 
@@ -37,15 +53,10 @@ jobs:
       - name: Prepare release files
         id: files
         env:
-          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         shell: pwsh
         run: |
-          $version = (Get-Content package.json | ConvertFrom-Json).version
-          if ($env:RELEASE_TAG -ne "v$version") {
-            throw "Release tag must be v$version."
-          }
-
-          $name = "Shammes-windows-x64-$version"
+          $name = "Shammes-windows-x64-$env:RELEASE_VERSION"
           $installer = Get-Item -LiteralPath "dist/$name.exe" -ErrorAction Stop
           $portable = Get-Item -LiteralPath "dist/$name.zip" -ErrorAction Stop
 

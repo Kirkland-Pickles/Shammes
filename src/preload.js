@@ -3,6 +3,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  appVersion: () => ipcRenderer.invoke('app:version'),
   desktopScan: (force) => ipcRenderer.invoke('desktop:scan', force),
   desktopApply: (rows) => ipcRenderer.invoke('desktop:apply', rows),
   desktopIcon: (file, index) => ipcRenderer.invoke('desktop:icon', file, index),

@@ -3137,6 +3137,12 @@ function offerUpdate(update) {
 }
 
 async function boot() {
+  window.api.appVersion().then(version => {
+    const label = $('.app-version');
+    label.textContent = `v${version}`;
+    label.hidden = false;
+    document.title = `Shammes ${label.textContent}`;
+  }).catch(() => {});
   const update = window.api.checkUpdate?.().catch(() => null);
   S.cfg = await window.api.cfgGet();
   const showIntro = !S.cfg.library_intro_seen && !S.cfg.steam_path && !S.cfg.api_key
